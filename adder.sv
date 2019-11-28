@@ -11,10 +11,12 @@ Notes:
 1. 
 =========================================================*/
 `include "diff_core_pkg.sv"
-module adder(
+module adder#(
+    parameter WIDTH = 32
+)(
     input  logic [PSUM_WIDTH - 1 : 0] a,
     input  logic [PSUM_WIDTH - 1 : 0] b,
-    output logic [PSUM_WIDTH - 1 : 0] ans,
+    output logic [PSUM_WIDTH - 1 : 0] ans
 );
 always_comb ans = a + b;
 endmodule

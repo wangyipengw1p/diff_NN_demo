@@ -18,10 +18,10 @@ module PE_matrix(
     input  logic                                                                clk,
     input  logic                                                                rst_n,
     //                          
-    input  logic [CONF_PE_COL - 1 : 0]                                          valid,
-    output logic [CONF_PE_COL - 1 : 0]                                          ready,
-    output logic [CONF_PE_COL - 1 : 0]                                          finish,
-    input  logic [CONF_PE_COL - 1 : 0]                                          bit_mode_i, //0: normal 8-bit  1: 2-4bit, no reg
+    input  logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_valid,
+    output logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_ready,
+    output logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_finish,
+    input  logic [CONF_PE_COL - 1 : 0]                                          bit_mode_i,     //0: normal 8-bit  1: 2-4bit, no reg
     input  logic [CONF_PE_COL - 1 : 0]                                          kernal_mode_i,
     input  logic [5 : 0][CONF_PE_COL - 1 : 0]                                   guard_map_i,
     input  logic [CONF_PE_COL - 1 : 0]                                          is_odd_row_i,
@@ -31,138 +31,45 @@ module PE_matrix(
     input  logic [7 : 0][CONF_PE_COL - 1 : 0]                                   activation_i,
     output logic [CONF_PE_COL - 1 : 0]                                          activation_en_o,
     //
-    output logic [3*6*PSUM_WIDTH - 1 : 0] [CONF_PE_ROW - 1 : 0]                 psum_ans_o,
-    output logic [CONF_PE_ROW - 1 : 0]                                          psum_almost_valid
+    output logic        [CONF_PE_ROW - 1 : 0]                                   write_back_ready,       
+    output logic [7 : 0][CONF_PE_ROW - 1 : 0]                                   write_back_data_o,      
+    input  logic        [CONF_PE_ROW - 1 : 0]                                   fm_buf_ready,           
+    output logic        [CONF_PE_ROW - 1 : 0]                                   write_back_data_o_valid,
+    output logic [5 : 0][CONF_PE_ROW - 1 : 0]                                   guard_o,                
+    input  logic        [CONF_PE_ROW - 1 : 0]                                   guard_buf_ready,        
+    output logic        [CONF_PE_ROW - 1 : 0]                                   guard_o_valid          
 );
-genvar i, j;
 
 // - ctrl - for each collum ---------------------------------------------------------------------
 // the following generate if for a collum
+logic [CONF_PE_COL - 1 : 0] connect_PE_col_ctrl_finish;
+PE_state_t                  connect_state       [CONF_PE_COL - 1 : 0];
+PE_weight_mode_t            connect_weight_mode [CONF_PE_COL - 1 : 0];
+logic [CONF_PE_COL - 1 : 0] connect_end_of_row;
+always_comb PE_col_ctrl_finish = connect_PE_col_ctrl_finish;
 generate
     for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_col_ctrl
-        // - stream data ctrl-------------------------------------------
-        state_t state, next_state;               //used by each PE
-        weight_mode_t weight_mode;               //used by each PE
-        logic [5 : 0]                            guard_map;
-        logic                                    is_odd_row;
-        logic                                    kernal_mode;
-        logic                                    end_of_row;
-        always_ff@(posedge clk or negedge rst_n)
-            if(!rst_n)begin
-                ready[j]  <= 1;
-                finish[j] <= 0;
-            end else begin
-                if (valid[j] && ready[j])     ready[j] <= 0;
-                if (finish[j] && !ready[j])   ready[j] <= 1;
-                if (inst_matrix[0].fifo_full[j] && ready[j])    ready[j] <= 0;          //?
-                if (inst_matrix[0].fifo_full[j] && !ready[j])   ready[j] <= 1;
-                finish[j] <= 0;
-                case(state)
-                    IDLE:
-                        if(valid[j] && ready[j] && guard_map_i == 0) finish[j] <= 1;
-                    ONE:
-                        if(guard_map[4:0] == 0) finish[j] <= 1;
-                    TWO:
-                        if(guard_map[3:0] == 0) finish[j] <= 1;
-                    THREE:
-                        if(guard_map[2:0] == 0) finish[j] <= 1;
-                    FOUR:
-                        if(guard_map[1:0] == 0) finish[j] <= 1;
-                    FIVE:
-                        if(guard_map[0] == 0) finish[j] <= 1;
-                    SIX:
-                        finish[j] <= 1;
-                endcase 
-            end
-
-        always_ff@(posedge clk or negedge rst_n)
-            if(!rst_n)
-                {
-                    guard_map,
-                    is_odd_row,
-                    kernal_mode,
-                    end_of_row
-                } <= '0;
-            else begin
-            if (valid[j] && ready[j]) begin
-                    guard_map   <= bit_mode_i ? '1 : guard_map_i;
-                    is_odd_row  <= is_odd_row_i;
-                    kernal_mode <= kernal_mode_i;
-                    end_of_row   <= end_of_row_i;
-                end
-            end
-        // activation_en_o
-        always_comb activation_en_o[j] = state == IDLE && !(valid[j] && ready[j]) ? 0 : 1;
-        // - state & mode ---------------------------------------------------------
-        always_ff@(posedge clk or negedge rst_n)
-            if (!rst_n) state <= IDLE;
-            else state <= next_state;
-
-        always_comb 
-            case(state)
-                IDLE:
-                    if(valid && ready)
-                        case(guard_map_i)
-                            6'b1?????: next_state <= ONE;
-                            6'b01????: next_state <= TWO;
-                            6'b001???: next_state <= THREE;
-                            6'b0001??: next_state <= FOUR;
-                            6'b00001?: next_state <= FIVE;
-                            6'b000001: next_state <= SIX;
-                            default:   next_state <= IDLE;
-                        endcase
-                ONE:
-                    case(guard_map[4:0])
-                        5'b1????: next_state <= TWO;
-                        5'b01???: next_state <= THREE;
-                        5'b001??: next_state <= FOUR;
-                        5'b0001?: next_state <= FIVE;
-                        5'b00001: next_state <= SIX;
-                        default:  next_state <= IDLE;
-                    endcase
-                TWO:
-                    case(guard_map[3:0])
-                        4'b1???:  next_state <= THREE;
-                        4'b01??:  next_state <= FOUR;
-                        4'b001?:  next_state <= FIVE;
-                        4'b0001:  next_state <= SIX;
-                        default:  next_state <= IDLE;
-                    endcase
-                THREE:
-                    case(guard_map[2:0])
-                        3'b1??:   next_state <= FOUR;
-                        3'b01?:   next_state <= FIVE;
-                        3'b001:   next_state <= SIX;
-                        default:  next_state <= IDLE;
-                    endcase
-                FOUR:
-                    case(guard_map[1:0])
-                        2'b1?:   next_state <= FIVE;
-                        2'b01:   next_state <= SIX;
-                        default:  next_state <= IDLE;
-                    endcase
-                FIVE:
-                    if(guard_map[0] == 1) next_state <= SIX;
-                    else next_state <= IDLE;
-                SIX:
-                    next_state <= IDLE;
-            endcase
-        // weight mode
-        always_comb 
-            if(kernal_mode == 0) weight_mode = E_MODE;
-            else 
-                case(state)
-                    ONE,THREE,FIVE: 
-                        weight_mode = is_odd_row ? A_MODE : B_MODE;
-                    TWO,FOUR,SIX:
-                        weight_mode = is_odd_row ? C_MODE : D_MODE;
-                endcase
-        
+    PE_col_ctrl(
+        .*,
+        .valid             (PE_col_ctrl_valid[j]),
+        .ready             (PE_col_ctrl_ready[j]),
+        .finish            (connect_PE_col_ctrl_finish),
+        .bit_mode_i        (bit_mode_i   [j]),        
+        .kernal_mode_i     (kernal_mode_i[j]),        
+        .guard_map_i       (guard_map_i  [j]),        
+        .is_odd_row_i      (is_odd_row_i [j]),        
+        .end_of_row_i      (end_of_row_i [j]),        
+        .state             (connect_state[j]),        
+        .weight_mode       (connect_weight_mode[j]),        
+        .end_of_row        (connect_end_of_row[j]),    
+        .activation_en_o   (activation_en_o)            
+    );
     end
 endgenerate
 
 // - PEs and adder tree ----------------------------------------------------------------
-
+logic [PSUM_WIDTH - 1 : 0][CONF_PE_ROW - 1 : 0] psum_ans;
+logic [CONF_PE_ROW - 1 : 0] psum_almost_valid;
 // generate COL * ROW of PE
 generate
     for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:inst_matrix
@@ -170,15 +77,15 @@ generate
         logic [CONF_PE_COL - 1 : 0]     fifo_empty;
         logic [CONF_PE_COL - 1 : 0]     fifo_full;
         logic [3*6*PSUM_WIDTH - 1 : 0]  psum_tmp;
-        always_comb fifo_rd_en = ~|fifo_empty;
+        always_comb fifo_rd_en = ~|fifo_empty;                      // && psum gen ready
         for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_row
             logic [3*6*PSUM_WIDTH - 1:0] fifo_dout;
             PE(
                 .*,
-                .state          (inst_col_ctrl[j].state),
-                .weight_mode    (inst_col_ctrl[j].weight_mode),
-                .finish         (inst_col_ctrl[j].finish),
-                .end_of_row     (inst_col_ctrl[j].end_of_row),
+                .state          (connect_state[j]),
+                .weight_mode    (connect_weight_mode[j]),
+                .finish_i       (connect_PE_col_ctrl_finish[j]),
+                .end_of_row     (connect_end_of_row[j]),
                 .weight_i       (weight_i[i][j]), 
                 .activation_i   (activation_i[j]),
                 .fifo_rd_en_o   (fifo_rd_en),
@@ -189,12 +96,71 @@ generate
             always_comb psum_tmp = psum_tmp + fifo_dout;                //could be optimised for less logic;       adder tree? ok here?
         end
 
-        always_comb psum_ans_o = psum_tmp;
+        always_comb psum_ans[i] = psum_tmp;
         always_comb psum_almost_valid[i] = fifo_rd_en;     //will be valid next clk cycle
-        /*always_ff@(posedge clk or negedge rst_n)
-            if(!rst_n) psum_valid[i] <= 0;
-            else psum_valid[i] <= fifo_rd_en;*/
     end
 endgenerate
 
+// - fm_guard_gen ---------------------------------------------------------------------
+logic [7:0]  connect_w_num;
+logic [7:0]  connect_h_num;
+logic [7:0]  connect_c_num;
+logic        connect_kernal_mode;
+logic        connect_bit_mode;
+logic [7:0]  connect_count_w;
+logic [7:0]  connect_count_h;
+logic [7:0]  connect_count_c;
+logic        connect_tick_tock;
+logic        connect_is_even_even_row;
+logic [1:0]  connect_count_3;
+// fm_guard_gen_col_control
+fm_guard_gen_ctrl (
+    .*,
+    .ctrl_valid      (fm_guard_gen_ctrl_valid),      //add in top
+    .ctrl_ready      (fm_guard_gen_ctrl_ready),      
+    .ctrl_finish     (fm_guard_gen_ctrl_finidh),          
+    .w_num_i         (fm_guard_gen_ctrl_),          
+    .h_num_i         (fm_guard_gen_ctrl_),      
+    .c_num_i         (fm_guard_gen_ctrl_),      
+    .kernal_mode_i   (fm_guard_gen_ctrl_),          
+    .bit_mode_i      (fm_guard_gen_ctrl_),      
+    .w_num           (connect_w_num),  
+    .h_num           (connect_h_num),  
+    .c_num           (connect_c_num),  
+    .kernal_mode     (connect_kernal_mode),          
+    .bit_mode        (connect_bit_mode),      
+    .count_w         (connect_count_w),      
+    .count_h         (connect_count_h),      
+    .count_c         (connect_count_c),      
+    .tick_tock       (connect_tick_tock),          
+    .is_even_even_row(connect_is_even_even_row),              
+    .count_3         (connect_count_3)     
+);
+//generate fm_guard_gen per row
+generate
+    for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:fm_guard_gen_per_row
+        fm_guard_gen(
+            .w_num                    (connect_w_num), 
+            .h_num                    (connect_h_num), 
+            .c_num                    (connect_c_num), 
+            .kernal_mode              (connect_kernal_mode),         
+            .bit_mode                 (connect_bit_mode),     
+            .count_w                  (connect_count_w),     
+            .count_h                  (connect_count_h),     
+            .count_c                  (connect_count_c),     
+            .tick_tock                (connect_tick_tock),                     
+            .is_even_even_row         (connect_is_even_even_row),             
+            .count_3                  (connect_count_3),     
+            .psum_almost_valid        (psum_almost_valid[i]),             
+            .psum_ans_i               (psum_ans[i]),     
+            .write_back_ready         (write_back_ready[i]),             
+            .write_back_data_o        (write_back_data_o[i]),             
+            .fm_buf_ready             (fm_buf_ready[i]),                 
+            .write_back_data_o_valid  (write_back_data_o_valid[i]),                     
+            .guard_o                  (guard_o[i]),     
+            .guard_buf_ready          (guard_buf_ready[i]),             
+            .guard_o_valid            (guard_o_valid[i])
+        );       
+    end
+endgenerate
 endmodule

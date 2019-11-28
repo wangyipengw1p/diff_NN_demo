@@ -19,7 +19,7 @@ module PE (
     //
     input  PE_state_t                               state,
     input  PE_weight_mode_t                         weight_mode,
-    input  logic                                    finish,
+    input  logic                                    finish_i,
     input  logic                                    end_of_row,
     input  logic [25 * 8 - 1 : 0]                   weight_i,
     //
@@ -35,8 +35,6 @@ module PE (
 
 // - general ----------------------------------------------
 logic [PSUM_WIDTH - 1 : 0][2 : 0][7 : 0] pre_psum;
-
-genvar i, j;
 
 // special for 5*5 kernal
 logic tick_tock;    
@@ -95,8 +93,10 @@ logic [PSUM_WIDTH - 1 : 0][5 : 0] add_a;
 logic [PSUM_WIDTH - 1 : 0][5 : 0] add_b;  
 logic [PSUM_WIDTH - 1 : 0][5 : 0] add_ans;  
 generate
-    for(i = 5; i >=0; i--) begin:inst_mul
-        adder(
+    for(i = 5; i >=0; i--) begin:inst_add
+        adder#(
+            .WIDTH(PSUM_WIDTH)
+        )an_adder(
             .a(add_a[i]),
             .b(add_b[i]),
             .ans(add_ans[i])
