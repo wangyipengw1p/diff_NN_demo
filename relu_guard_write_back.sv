@@ -3,7 +3,7 @@ Descripton:
 
 
 Create:  
-Yipeng   wangyipengv@outlook.com  20191127
+Yipeng   wangyipengv@outlook.com  20191128
 
 Modify:
 
@@ -37,7 +37,17 @@ module relu_guard_write_back(
     output logic                                                guard_o_valid
 );
 
-typedef enum logic[2:0] {  IDLE  = 3'b000, ONE, TWO, THREE, FOUR, FIVE, SIX, START} state_t;
+typedef enum logic[2:0] {  
+    IDLE  = 3'd0, 
+    ONE   = 3'd1, 
+    TWO   = 3'd2, 
+    THREE = 3'd3, 
+    FOUR  = 3'd4, 
+    FIVE  = 3'd5, 
+    SIX   = 3'd6,
+    START = 3'd7
+} state_t;
+
 state_t state, next_state;
 logic [5:0] guard_map;
 logic [PSUM_WIDTH - 1 : 0][5:0] data_after_relu, data_after_relu_reg;

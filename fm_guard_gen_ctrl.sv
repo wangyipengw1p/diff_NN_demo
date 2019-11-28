@@ -3,7 +3,7 @@ Descripton:
 
 
 Create:  
-Yipeng   wangyipengv@outlook.com  20191127
+Yipeng   wangyipengv@outlook.com  20191128
 
 Modify:
 
@@ -26,6 +26,8 @@ module fm_guard_gen_ctrl(
     input  logic        kernal_mode_i,
     input  logic        bit_mode_i,
     //
+    input               psum_almost_valid,
+    //
     output logic [7:0]  w_num,
     output logic [7:0]  h_num,
     output logic [7:0]  c_num,
@@ -37,7 +39,7 @@ module fm_guard_gen_ctrl(
     output logic        tick_tock,        //distinguish odd and even lines
     output logic        is_even_even_row,
     output logic [1:0]  count_3
-),
+);
 // - ctrl and reg ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
@@ -65,9 +67,6 @@ always_ff@(posedge clk or negedge rst_n)
         kernal_mode     <= kernal_mode_i;
         bit_mode        <= bit_mode_i;
     end
-always_ff@(posedge clk or negedge rst_n)
-    if(!rst_n) psum_valid <= 0;
-    else psum_valid <= psum_almost_valid;
 // - counter for local ctrl ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin

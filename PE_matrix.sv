@@ -3,7 +3,7 @@ Descripton:
 
 
 Create:  
-Yipeng   wangyipengv@outlook.com  20191126
+Yipeng   wangyipengv@outlook.com  20191127
 
 Modify:
 
@@ -12,6 +12,7 @@ Notes:
 
 TODO:
 adder tree
+reduce redundant logic
 =========================================================*/
 `include "diff_core_pkg.sv"
 module PE_matrix(
@@ -21,7 +22,7 @@ module PE_matrix(
     input  logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_valid,
     output logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_ready,
     output logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_finish,
-    input  logic [CONF_PE_COL - 1 : 0]                                          bit_mode_i,     //0: normal 8-bit  1: 2-4bit, no reg
+    input  logic [CONF_PE_COL - 1 : 0]                                          bit_mode_i,             //0: normal 8-bit  1: 2-4bit, no reg
     input  logic [CONF_PE_COL - 1 : 0]                                          kernal_mode_i,
     input  logic [5 : 0][CONF_PE_COL - 1 : 0]                                   guard_map_i,
     input  logic [CONF_PE_COL - 1 : 0]                                          is_odd_row_i,
@@ -49,7 +50,7 @@ logic [CONF_PE_COL - 1 : 0] connect_end_of_row;
 always_comb PE_col_ctrl_finish = connect_PE_col_ctrl_finish;
 generate
     for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_col_ctrl
-    PE_col_ctrl(
+    PE_col_ctrl inst_PE_col_ctrl(
         .*,
         .valid             (PE_col_ctrl_valid[j]),
         .ready             (PE_col_ctrl_ready[j]),
@@ -80,7 +81,7 @@ generate
         always_comb fifo_rd_en = ~|fifo_empty;                      // && psum gen ready
         for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_row
             logic [3*6*PSUM_WIDTH - 1:0] fifo_dout;
-            PE(
+            PE inst_PE(
                 .*,
                 .state          (connect_state[j]),
                 .weight_mode    (connect_weight_mode[j]),
@@ -114,32 +115,33 @@ logic        connect_tick_tock;
 logic        connect_is_even_even_row;
 logic [1:0]  connect_count_3;
 // fm_guard_gen_col_control
-fm_guard_gen_ctrl (
+fm_guard_gen_ctrl inst_fm_guard_gen_ctrl(
     .*,
-    .ctrl_valid      (fm_guard_gen_ctrl_valid),      //add in top
-    .ctrl_ready      (fm_guard_gen_ctrl_ready),      
-    .ctrl_finish     (fm_guard_gen_ctrl_finidh),          
-    .w_num_i         (fm_guard_gen_ctrl_),          
-    .h_num_i         (fm_guard_gen_ctrl_),      
-    .c_num_i         (fm_guard_gen_ctrl_),      
-    .kernal_mode_i   (fm_guard_gen_ctrl_),          
-    .bit_mode_i      (fm_guard_gen_ctrl_),      
-    .w_num           (connect_w_num),  
-    .h_num           (connect_h_num),  
-    .c_num           (connect_c_num),  
-    .kernal_mode     (connect_kernal_mode),          
-    .bit_mode        (connect_bit_mode),      
-    .count_w         (connect_count_w),      
-    .count_h         (connect_count_h),      
-    .count_c         (connect_count_c),      
-    .tick_tock       (connect_tick_tock),          
-    .is_even_even_row(connect_is_even_even_row),              
-    .count_3         (connect_count_3)     
+    .ctrl_valid       (fm_guard_gen_ctrl_valid),      //add in top
+    .ctrl_ready       (fm_guard_gen_ctrl_ready),      
+    .ctrl_finish      (fm_guard_gen_ctrl_finidh),          
+    .w_num_i          (fm_guard_gen_ctrl_),          
+    .h_num_i          (fm_guard_gen_ctrl_),      
+    .c_num_i          (fm_guard_gen_ctrl_),      
+    .kernal_mode_i    (fm_guard_gen_ctrl_),          
+    .bit_mode_i       (fm_guard_gen_ctrl_),     
+    .psum_almost_valid(psum_almost_valid[CONF_PE_ROW - 1]),
+    .w_num            (connect_w_num),  
+    .h_num            (connect_h_num),  
+    .c_num            (connect_c_num),  
+    .kernal_mode      (connect_kernal_mode),          
+    .bit_mode         (connect_bit_mode),      
+    .count_w          (connect_count_w),      
+    .count_h          (connect_count_h),      
+    .count_c          (connect_count_c),      
+    .tick_tock        (connect_tick_tock),          
+    .is_even_even_row (connect_is_even_even_row),              
+    .count_3          (connect_count_3)     
 );
 //generate fm_guard_gen per row
 generate
     for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:fm_guard_gen_per_row
-        fm_guard_gen(
+        fm_guard_gen inst_fm_guard_gen(
             .w_num                    (connect_w_num), 
             .h_num                    (connect_h_num), 
             .c_num                    (connect_c_num), 

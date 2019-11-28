@@ -3,7 +3,7 @@ Descripton:
 
 
 Create:  
-Yipeng   wangyipengv@outlook.com  20191127
+Yipeng   wangyipengv@outlook.com  20191128
 
 Modify:
 
@@ -13,6 +13,8 @@ Notes:
 TODO:
 ? 32 bit -> 8 bit ?
 optimise the adder
+bian zhi
+bias
 =========================================================*/
 `include "diff_core_pkg.sv"
 module fm_guard_gen(
@@ -21,7 +23,6 @@ module fm_guard_gen(
     //
     input  logic [7:0]                          w_num,
     input  logic [7:0]                          h_num,
-    input  logic [7:0]                          c_num,
     input  logic                                kernal_mode,
     input  logic                                bit_mode,
     input  logic [7:0]                          count_w,
@@ -240,7 +241,7 @@ always_ff@(posedge clk or negedge rst_n)
 logic write_back_valid;                                       ///ready output
 logic [15:0] pace;
 always_comb pace = h_num * w_num;
-relu_guard_write_back(
+relu_guard_write_back inst_relu_guard_write_back(
     .ctrl_valid          (write_back_valid),       
     .ctrl_ready          (write_back_ready),       
     .ctrl_finish         (write_back_finish),    
