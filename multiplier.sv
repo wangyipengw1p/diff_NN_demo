@@ -10,7 +10,6 @@ Modify:
 Notes:
 1. TODO
 =========================================================*/
-`include "diff_core_pkg.sv"
 module multiplier(
     input  logic        mode,     //0: normal 8-bit  1: 2-4bit
     input  logic [7:0]  a,

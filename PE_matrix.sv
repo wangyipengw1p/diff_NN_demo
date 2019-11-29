@@ -14,7 +14,7 @@ TODO:
 adder tree
 reduce redundant logic
 =========================================================*/
-`include "diff_core_pkg.sv"
+import diff_core_pkg::*;
 module PE_matrix(
     input  logic                                                                clk,
     input  logic                                                                rst_n,
@@ -32,7 +32,9 @@ module PE_matrix(
     input  logic [7 : 0][CONF_PE_COL - 1 : 0]                                   activation_i,
     output logic [CONF_PE_COL - 1 : 0]                                          activation_en_o,
     //
-    output logic        [CONF_PE_ROW - 1 : 0]                                   write_back_ready,       
+    input  logic [7 : 0][5 : 0][CONF_PE_ROW - 1 : 0]                            bias_i,
+    output logic [CONF_PE_ROW - 1 : 0]                                          bias_en_o,
+    //     
     output logic [7 : 0][CONF_PE_ROW - 1 : 0]                                   write_back_data_o,      
     input  logic        [CONF_PE_ROW - 1 : 0]                                   fm_buf_ready,           
     output logic        [CONF_PE_ROW - 1 : 0]                                   write_back_data_o_valid,
@@ -40,13 +42,14 @@ module PE_matrix(
     input  logic        [CONF_PE_ROW - 1 : 0]                                   guard_buf_ready,        
     output logic        [CONF_PE_ROW - 1 : 0]                                   guard_o_valid          
 );
-
+genvar i, j;
 // - ctrl - for each collum ---------------------------------------------------------------------
 // the following generate if for a collum
 logic [CONF_PE_COL - 1 : 0] connect_PE_col_ctrl_finish;
 PE_state_t                  connect_state       [CONF_PE_COL - 1 : 0];
 PE_weight_mode_t            connect_weight_mode [CONF_PE_COL - 1 : 0];
 logic [CONF_PE_COL - 1 : 0] connect_end_of_row;
+logic [CONF_PE_COL - 1 : 0] connect_bit_mode;
 always_comb PE_col_ctrl_finish = connect_PE_col_ctrl_finish;
 generate
     for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_col_ctrl
@@ -59,10 +62,12 @@ generate
         .kernal_mode_i     (kernal_mode_i[j]),        
         .guard_map_i       (guard_map_i  [j]),        
         .is_odd_row_i      (is_odd_row_i [j]),        
-        .end_of_row_i      (end_of_row_i [j]),        
+        .end_of_row_i      (end_of_row_i [j]),   
+        .fifo_full         (inst_matrix[0].fifo_full),     
         .state             (connect_state[j]),        
         .weight_mode       (connect_weight_mode[j]),        
-        .end_of_row        (connect_end_of_row[j]),    
+        .end_of_row        (connect_end_of_row[j]), 
+        .bit_mode          (connect_bit_mode[j]),   
         .activation_en_o   (activation_en_o)            
     );
     end
@@ -89,6 +94,7 @@ generate
                 .end_of_row     (connect_end_of_row[j]),
                 .weight_i       (weight_i[i][j]), 
                 .activation_i   (activation_i[j]),
+                .bit_mode       (connect_bit_mode),
                 .fifo_rd_en_o   (fifo_rd_en),
                 .fifo_dout_o    (fifo_dout),
                 .fifo_empty_o   (fifo_empty[j]),
@@ -155,7 +161,8 @@ generate
             .count_3                  (connect_count_3),     
             .psum_almost_valid        (psum_almost_valid[i]),             
             .psum_ans_i               (psum_ans[i]),     
-            .write_back_ready         (write_back_ready[i]),             
+            .bias_i                   (bias_i[i]),
+            .bias_en_o                (bias_en_o[i]),
             .write_back_data_o        (write_back_data_o[i]),             
             .fm_buf_ready             (fm_buf_ready[i]),                 
             .write_back_data_o_valid  (write_back_data_o_valid[i]),                     

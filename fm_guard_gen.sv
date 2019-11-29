@@ -16,7 +16,7 @@ optimise the adder
 bian zhi
 bias
 =========================================================*/
-`include "diff_core_pkg.sv"
+import diff_core_pkg::*;
 module fm_guard_gen(
     input  logic                                clk,
     input  logic                                rst_n,
@@ -35,7 +35,9 @@ module fm_guard_gen(
     input  logic                                psum_almost_valid,
     input  logic [3 * 6 * PSUM_WIDTH - 1 : 0 ]  psum_ans_i,
     //
-    output logic                                write_back_ready,
+    input  logic [7:0][5:0]                     bias_i,
+    output logic                                bias_en_o,
+    //
     output logic                                write_back_finish,
     output logic [7:0]                          write_back_data_o,   
     output logic                                fm_buf_ready,           
@@ -47,8 +49,9 @@ module fm_guard_gen(
 );
 // - declearation -------------------------------------------------------
 logic psum_valid;       // delayed psum_almost_valid
-
-// - tmp line buffer --------------------------------------------------
+logic write_back_ready; //                                                                              !!!
+genvar i, j;
+// - tmp line buffer -----------------------------------------------------------------
 logic [$clog2(FM_GUARD_GEN_TMP_BUF_DEPTH) - 1 : 0] buf_addr;
 //logic [$clog2(FM_GUARD_GEN_BUF_DEPTH) - 1 : 0] buf_rd_addr;
 logic [3*6*PSUM_WIDTH - 1 : 0] buf_data_in, buf_data_out_1, buf_data_out_2;
@@ -186,6 +189,7 @@ logic [PSUM_WIDTH - 1 : 0][5:0] psum_buf_data_in, psum_buf_data_out;
 logic [PSUM_WIDTH - 1 : 0][5:0] psum_add_ans, psum_add_ans_for_4_bit;
 logic psum_buf_ping_pong;
 logic psum_buf_rd_en;
+logic [PSUM_WIDTH - 1 : 0][5:0] bias_to_add;
 always_comb psum_buf_data_in = bit_mode ? psum_add_ans_for_4_bit : psum_add_ans;
 ping_pong_buffer #(
     .BIT_LENGTH(6*PSUM_WIDTH),
@@ -195,7 +199,7 @@ ping_pong_buffer #(
     .clkb       (clk),
     .addra      (psum_buf_wr_addr),
     .addrb      (psum_buf_rd_addr),
-    .dina       (psum_add_ans),
+    .dina       (psum_buf_data_in),
     .wea        (psum_buf_wr_en),
     .ena        ('1),
     .enb        (psum_buf_rd_en),
@@ -205,10 +209,13 @@ ping_pong_buffer #(
 
 generate 
     for( i = 5; i >=0; i--)begin:add_for_psum_buf
+        logic [PSUM_WIDTH - 1 : 0] tmp_add_a;
+        always_comb bias_to_add[i] = {24'd0,bias_i};
+        always_comb tmp_add_a = count_c == 1 ? bias_to_add[i] : add_ans[i];
         adder #(
             .WIDTH(PSUM_WIDTH)
         )adder_psum(
-            .a(add_ans[i]),
+            .a(tmp_add_a),
             .b(psum_buf_data_out[i]),
             .ans(psum_add_ans[i])
         );
@@ -237,6 +244,9 @@ always_ff@(posedge clk or negedge rst_n)
             psum_buf_ping_pong <= ~psum_buf_ping_pong;  //++ ok?
         end
     end
+// for bias
+always_comb bias_en_o = count_c == 1 && psum_almost_valid;
+
 // - relu_guard_write_back ----------------------------------------------------
 logic write_back_valid;                                       ///ready output
 logic [15:0] pace;

@@ -12,7 +12,7 @@ Notes:
 
 TODO:
 =========================================================*/
-`include "diff_core_pkg.sv"
+import diff_core_pkg::*;
 module PE_col_ctrl(
     input  logic                clk,
     input  logic                rst_n,
@@ -26,9 +26,12 @@ module PE_col_ctrl(
     input  logic                is_odd_row_i,
     input  logic                end_of_row_i,
     //
+    input  logic                fifo_full,
+    //
     output PE_state_t           state,      
     output PE_weight_mode_t     weight_mode, 
     output logic                end_of_row,
+    output logic                bit_mode,
     //
     output logic                activation_en_o
 );
@@ -44,8 +47,8 @@ always_ff@(posedge clk or negedge rst_n)
     end else begin
         if (valid  && ready )     ready  <= 0;
         if (finish  && !ready )   ready  <= 1;
-        if (inst_matrix[0].fifo_full  && ready )    ready  <= 0;          //?
-        if (inst_matrix[0].fifo_full  && !ready )   ready  <= 1;
+        if (fifo_full  && ready )    ready  <= 0;          //?
+        if (fifo_full  && !ready )   ready  <= 1;
         finish  <= 0;
         case(state)
             IDLE:
@@ -71,11 +74,13 @@ always_ff@(posedge clk or negedge rst_n)
             guard_map,
             is_odd_row,
             kernal_mode,
+            bit_mode,
             end_of_row
         } <= '0;
     else begin
     if (valid  && ready ) begin
             guard_map   <= bit_mode_i ? '1 : guard_map_i;                   //dense when 4bit !!!!!
+            bit_mode    <= bit_mode_i;
             is_odd_row  <= is_odd_row_i;
             kernal_mode <= kernal_mode_i;
             end_of_row   <= end_of_row_i;
@@ -86,7 +91,7 @@ always_comb activation_en_o  = state == IDLE && !(valid  && ready ) ? 0 : 1;
 // - state & mode ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) state <= IDLE;
-    else if (!inst_matrix.fifo_full )                 //only first row's fifo full signals were connected, may cause reliablity problem
+    else if (!fifo_full )                 //only first row's fifo full signals were connected, may cause reliablity problem
         state <= next_state;
 
 always_comb 

@@ -12,7 +12,7 @@ Notes:
 
 TODO:
 =========================================================*/
-`include "diff_core_pkg.sv"
+import diff_core_pkg::*;
 module fm_guard_gen_ctrl(
     input  logic        clk,
     input  logic        rst_n,
@@ -82,7 +82,7 @@ always_ff@(posedge clk or negedge rst_n)
         if (ctrl_ready && ctrl_valid) begin
             count_w     <= w_num_i; 
             count_h     <= h_num_i;
-            count_c     <= c_num_i;
+            count_c     <= c_num_i + 1;         //bias
             tick_tock   <= 0;
             count_3     <= '0;
         end else if(psum_almost_valid)begin

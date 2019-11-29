@@ -14,7 +14,7 @@ TODO:
 critical path here
 Data truncation ok ?
 =========================================================*/
-`include "diff_core_pkg.sv"
+import diff_core_pkg::*;
 module relu_guard_write_back(
     input  logic                                                clk,
     input  logic                                                rst_n,
@@ -162,7 +162,7 @@ always_ff@(posedge clk or negedge rst_n)
     end
         
 generate
-    for (i = 5; i >= 0; i--)begin:relu
+    for (genvar i = 5; i >= 0; i--)begin:relu
         always_comb begin
             data_after_relu[i] = state == START ? data_i[i][PSUM_WIDTH - 1] == 1 ? '0 : data_i[i][7:0] : '0; //Data truncation
             guard_map = state == START ? data_i[i][PSUM_WIDTH - 1] == 1 || data_i[i] == 0 ? 0 : 1 : 0;      //---------------might be critical path

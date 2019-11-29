@@ -12,7 +12,7 @@ Notes:
 1. 1 clk read latency
 
 =========================================================*/
-module fifo_syn#(
+module fifo_sync#(
     parameter DATA_WIDE = 64,
     parameter FIFO_DEPT = 16
 )
@@ -73,7 +73,7 @@ end
 assign empty = (count == '0);
 assign full  = (count == FIFO_DEPT);
 
-endmodule: Fifo_syn
+endmodule
 
 
 

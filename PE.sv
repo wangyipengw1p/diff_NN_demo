@@ -11,7 +11,7 @@ Notes:
 1. weight format
 2. 
 =========================================================*/
-`include "diff_core_pkg.sv"
+import diff_core_pkg::*;
 
 module PE (
     input  logic                                    clk,
@@ -25,14 +25,14 @@ module PE (
     //
     input  logic [7 : 0]                            activation_i,
     //
-
+    input  logic                                    bit_mode,
     //
     input  logic                                    fifo_rd_en_o,
     output logic [3*6*PSUM_WIDTH - 1 : 0]           fifo_dout_o,
     output logic                                    fifo_empty_o,
     output logic                                    fifo_full_o
 );
-
+genvar i, j;
 // - general ----------------------------------------------
 logic [PSUM_WIDTH - 1 : 0][2 : 0][7 : 0] pre_psum;
 
@@ -57,8 +57,8 @@ logic [7 : 0][8 : 0] mul_b;  //for easy coding
 logic [15: 0][8 : 0] mul_ans;//for easy coding
 logic [PSUM_WIDTH-1: 0][8 : 0] mul_ans_conv;//for bit length conversion
 generate
-    for(i = 8; i >=0; i--) begin:mul
-        multiplier(
+    for(genvar i = 8; i >=0; i--) begin:mul
+        multiplier inst_mul(
             .mode(bit_mode),
             .a(activation_i),
             .b(mul_b[i]),
@@ -77,12 +77,12 @@ always_comb begin
             mul_b[2:0] = weight.A_9[2:0];   //hold, for energy save
         end
         C_MODE:begin
-            mul_b[8:6] = weight.B_6[8:6];   //hold
+            mul_b[8:6] = weight.B_6[5:3];   //hold
             mul_b[5:0] = weight.C_6;
         end
         D_MODE:begin
             {mul_b[8:7],mul_b[1:0]} =  weight.D_4;
-            mul_b[6] = weight.B_6[6];       //hold
+            mul_b[6] = weight.B_6[3];       //hold
             mul_b[5:2] = weight.C_6[5:2];    //hold
         end
     endcase
