@@ -11,7 +11,7 @@ Notes:
 1. weight format
 2. 
 =========================================================*/
-import diff_core_pkg::*;
+import diff_demo_pkg::*;
 
 module PE (
     input  logic                                    clk,
@@ -36,7 +36,7 @@ genvar i, j;
 // - general ----------------------------------------------
 logic [PSUM_WIDTH - 1 : 0][2 : 0][7 : 0] pre_psum;
 
-// special for 5*5 kernal
+// special for 5*5 kernel
 logic tick_tock;    
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) 
@@ -130,7 +130,7 @@ end
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) 
         pre_psum <= '0;
-    else if(finish == 1 && end_of_row)
+    else if(finish == 1 && end_of_row)      // deal with corner value
         pre_psum <= '0;
     else if(finish == 1 && tick_tock)
         pre_psum <= {pre_psum[1:0],'0};
@@ -156,24 +156,24 @@ always_ff@(posedge clk or negedge rst_n)
             C_MODE:
                 if(!tick_tock) begin
                     {pre_psum[8-(state+1 >> 1)],pre_psum[7-(state+1 >> 1)]} <= add_ans;
-                    pre_psum[8-(state+1 >> 1)][2] <= '0;                                //clear
-                    pre_psum[7-(state+1 >> 1)][2] <= '0;
+                    //pre_psum[8-(state+1 >> 1)][2] <= '0;                                //clear: unnecessary
+                    //pre_psum[7-(state+1 >> 1)][2] <= '0;
                     pre_psum[6-(state+1 >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
                 end else begin
                     {pre_psum[5-(state+1 >> 1)],pre_psum[4-(state+1 >> 1)]} <= add_ans;
-                    pre_psum[5-(state+1 >> 1)][2] <= '0;
-                    pre_psum[4-(state+1 >> 1)][2] <= '0;
+                    // pre_psum[5-(state+1 >> 1)][2] <= '0;
+                    //pre_psum[4-(state+1 >> 1)][2] <= '0;
                     pre_psum[3-(state+1 >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
                 end
             D_MODE:
                 if(!tick_tock) begin
                     {pre_psum[8-(state+1 >> 1)],pre_psum[7-(state+1 >> 1)]} <= add_ans;
-                    pre_psum[8-(state+1 >> 1)][2] <= '0;
-                    pre_psum[7-(state+1 >> 1)][2] <= '0;
+                    //pre_psum[8-(state+1 >> 1)][2] <= '0;
+                    //pre_psum[7-(state+1 >> 1)][2] <= '0;
                 end else begin
                     {pre_psum[5-(state+1 >> 1)],pre_psum[4-(state+1 >> 1)]} <= add_ans;
-                    pre_psum[5-(state+1 >> 1)][2] <= '0;
-                    pre_psum[4-(state+1 >> 1)][2] <= '0;
+                    //pre_psum[5-(state+1 >> 1)][2] <= '0;
+                    //pre_psum[4-(state+1 >> 1)][2] <= '0;
                 end
         endcase
     end

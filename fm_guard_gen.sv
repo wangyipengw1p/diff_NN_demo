@@ -16,27 +16,26 @@ optimise the adder
 bian zhi
 bias
 =========================================================*/
-import diff_core_pkg::*;
+import diff_demo_pkg::*;
 module fm_guard_gen(
     input  logic                                clk,
     input  logic                                rst_n,
     //
     input  logic [7:0]                          w_num,
     input  logic [7:0]                          h_num,
-    input  logic                                kernal_mode,
+    input  logic                                kernel_mode,
     input  logic                                bit_mode,
     input  logic [7:0]                          count_w,
     input  logic [7:0]                          count_h,
     input  logic [7:0]                          count_c,
-    input  logic                                tick_tock,              //distinguish odd and even lines
-    input  logic                                is_even_even_row,
+    input  logic                                is_even_row,              //distinguish odd and even lines
+    input  logic                                is_even_even_row,         // 0 0 1 1 0 0 1 1 0 0 ...
     input  logic [1:0]                          count_3,
     //
     input  logic                                psum_almost_valid,
     input  logic [3 * 6 * PSUM_WIDTH - 1 : 0 ]  psum_ans_i,
     //
     input  logic [7:0][5:0]                     bias_i,
-    output logic                                bias_en_o,
     //
     output logic                                write_back_finish,
     output logic [7:0]                          write_back_data_o,   
@@ -56,7 +55,7 @@ logic [$clog2(FM_GUARD_GEN_TMP_BUF_DEPTH) - 1 : 0] buf_addr;
 //logic [$clog2(FM_GUARD_GEN_BUF_DEPTH) - 1 : 0] buf_rd_addr;
 logic [3*6*PSUM_WIDTH - 1 : 0] buf_data_in, buf_data_out_1, buf_data_out_2;
 logic buf_wr_en_1, buf_wr_en_2;
-logic [PSUM_WIDTH - 1 : 0][5:0] add_a, add_b, add_c, add_ans_intermediate, add_ans;
+logic [PSUM_WIDTH - 1 : 0][5:0] add_a, add_b, add_c, add_d, add_ans_1, add_ans_2;
 
 two_port_mem #(
     .BIT_LENGTH(3*6*PSUM_WIDTH),
@@ -87,22 +86,22 @@ two_port_mem #(
     .doutb      (buf_data_out_2)
 );
 generate 
-        for(j = 5; j >= 0; j--) begin:inst_adder_line
-            adder #(
-                .WIDTH(PSUM_WIDTH)
-            )adder1(
-                .a(add_a[j]),
-                .b(add_b[j]),
-                .ans(add_ans_intermediate[j])
-            );
-            adder #(
-                .WIDTH(PSUM_WIDTH)
-            )adder2(
-                .a(add_ans_intermediate[j]),
-                .b(add_c[j]),
-                .ans(add_ans[j])
-            );
-        end
+    for(j = 5; j >= 0; j--) begin:inst_adder_line
+        adder #(
+            .WIDTH(PSUM_WIDTH)
+        )adder1(
+            .a(add_a[j]),
+            .b(add_b[j]),
+            .ans(add_ans_1[j])
+        );
+        adder #(
+            .WIDTH(PSUM_WIDTH)
+        )adder2(
+            .a(add_d[j]),
+            .b(add_c[j]),
+            .ans(add_ans_2[j])
+        );
+    end
 endgenerate
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)
@@ -113,36 +112,24 @@ always_ff@(posedge clk or negedge rst_n)
         if (buf_addr == (w_num - 1)) buf_addr <= 0;
         else buf_addr++;
     end
-// en and din
+//  - en and din assignment -----------------------------------------------------------------------------
 always_comb begin
-    buf_wr_en_1 = kernal_mode ?  ~is_even_even_row & psum_valid : ~tick_tock & psum_valid;
-    buf_wr_en_2 = kernal_mode ?  is_even_even_row & psum_valid  : tick_tock & psum_valid;
-    if(kernal_mode) begin //3*3
+    buf_wr_en_1 = kernel_mode ?  ~is_even_even_row & psum_valid : ~is_even_row & psum_valid;
+    buf_wr_en_2 = kernel_mode ?  is_even_even_row & psum_valid  : is_even_row & psum_valid;
+    if(kernel_mode) begin //3*3
         case (count_3)
-            2'b00:                                                                      //to be optimised
-                buf_data_in = tick_tock ? ~is_even_even_row ? {psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH], 
-                                                               buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] + psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH],
-                                                               buf_data_out_1[6*PSUM_WIDTH - 1 : 0] + psum_ans_i[6*PSUM_WIDTH - 1 : 0]}
-                                                            : {psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH], 
-                                                               buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] + psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH],
-                                                               buf_data_out_2[6*PSUM_WIDTH - 1 : 0] + psum_ans_i[6*PSUM_WIDTH - 1 : 0]}
-                                        : psum_ans_i;
+            2'b00:                                                                  
+                buf_data_in = is_even_row ? ~is_even_even_row ? {buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH], add_ans_1, add_ans_2}
+                                                              : {buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH], add_ans_1, add_ans_2}
+                                          : psum_ans_i;
             2'b01:
-                buf_data_in = tick_tock ? ~is_even_even_row ? {buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH] + psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH],
-                                                               psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH], 
-                                                               buf_data_out_1[6*PSUM_WIDTH - 1 : 0] + psum_ans_i[6*PSUM_WIDTH - 1 : 0]}
-                                                            : {buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH] + psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH],
-                                                               psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH], 
-                                                               buf_data_out_2[6*PSUM_WIDTH - 1 : 0] + psum_ans_i[6*PSUM_WIDTH - 1 : 0]}
-                                        : {psum_ans_i[6*PSUM_WIDTH - 1 : 0], psum_ans_i[3*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH]};
+                buf_data_in = is_even_row ? ~is_even_even_row ? {add_ans_2, buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH], add_ans_1}
+                                                              : {add_ans_2, buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH], add_ans_1}
+                                          : {psum_ans_i[6*PSUM_WIDTH - 1 : 0], psum_ans_i[3*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH]};
             2'b10:
-                buf_data_in = tick_tock ? ~is_even_even_row ? {buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] + psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH],
-                                                               buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH] + psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH],
-                                                               psum_ans_i[6*PSUM_WIDTH - 1 : 0]}
-                                                            : {buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] + psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH],
-                                                               buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH] + psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH],
-                                                               psum_ans_i[6*PSUM_WIDTH - 1 : 0]}
-                                        :{psum_ans_i[2*6*PSUM_WIDTH - 1 : 0], psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH]};
+                buf_data_in = is_even_row ? ~is_even_even_row ? {add_ans_1, add_ans_2, buf_data_out_1[6*PSUM_WIDTH - 1 : 0]}
+                                                              : {add_ans_1, add_ans_2, buf_data_out_2[6*PSUM_WIDTH - 1 : 0]}
+                                          :{psum_ans_i[2*6*PSUM_WIDTH - 1 : 0], psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH]};
             default:
                 buf_data_in = '0;
         endcase
@@ -159,30 +146,116 @@ always_comb begin
         endcase
     end
 end
-// adder
+//  - adder assignment, with corner value considered --------------------------------------------------------
 always_comb 
-    case (count_3)
-        2'b00:begin
+if(kernel_mode)
+    case(count_h)
+        h_num - 1: begin
             add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
-            add_b = buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
-            add_c = buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
-        end
-        2'b01:begin
-            add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
-            add_b = buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
-            add_c = buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
-        end
-        2'b10:begin
-            add_a = buf_data_in[6*PSUM_WIDTH - 1 : 0];
-            add_b = buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
-            add_c = buf_data_out_2[6*PSUM_WIDTH - 1 : 0];
-        end
-        default:begin
-            add_a = '0;
             add_b = '0;
             add_c = '0;
+            add_d = add_ans_1;
         end
+        h_num - 2: begin
+            add_a = '0;
+            add_b = '0;
+            add_c = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+            add_d = is_even_even_row ? buf_data_out_2[6*PSUM_WIDTH - 1 : 0] : buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
+        end
+        h_num - 3:begin
+            add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+            add_b = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] : buf_data_out_1[2*66*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+            add_c = '0;
+            add_d = add_ans_1;
+        end
+        default:
+            if (is_even_row) //even row
+                case (count_3)
+                    2'b00:begin
+                        add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                        add_b = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] : buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                        add_c = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                        add_d = is_even_even_row ? buf_data_out_2[6*PSUM_WIDTH - 1 : 0] : buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
+                    end
+                    2'b01:begin
+                        add_a = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                        add_b = is_even_even_row ? buf_data_out_2[6*PSUM_WIDTH - 1 : 0] : buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
+                        add_c = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH - 1];
+                        add_d = is_even_even_row ? buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH - 1] : buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH - 1];
+                    end
+                    2'b10:begin
+                        add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                        add_b = is_even_even_row ? buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH] : buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                        add_c = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH - 1];
+                        add_d = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH - 1] : buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH - 1];
+                    end
+                    default:begin
+                        add_a = '0;
+                        add_b = '0;
+                        add_c = '0;
+                        add_d = '0;
+                    end
+                endcase
+            else begin  //odd row
+                add_d = add_ans_1;
+                case (count_3)
+                    2'b00:begin
+                        add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                        add_b = buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                        add_c = buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                    end
+                    2'b01:begin
+                        add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                        add_b = buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                        add_c = buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                    end
+                    2'b10:begin
+                        add_a = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                        add_b = buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
+                        add_c = buf_data_out_2[6*PSUM_WIDTH - 1 : 0];
+                    end
+                    default:begin
+                        add_a = '0;
+                        add_b = '0;
+                        add_c = '0;
+                    end
+                endcase
+            end
     endcase
+else begin       //3*3
+    add_d = add_ans_1;
+    if(count_h == h_num - 1) begin                                  //corner value
+        add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+        add_b = '0;
+        add_c = '0;
+    end else if (count_h == h_num - 2)begin
+        add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+        add_b = buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+        add_c = '0;
+    end else
+        case (count_3)
+            2'b00:begin
+                add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                add_b = buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                add_c = buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+            end
+            2'b01:begin
+                add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                add_b = buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                add_c = buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+            end
+            2'b10:begin
+                add_a = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                add_b = buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
+                add_c = buf_data_out_2[6*PSUM_WIDTH - 1 : 0];
+            end
+            default:begin
+                add_a = '0;
+                add_b = '0;
+                add_c = '0;
+            end
+        endcase
+end
 // - psum buffer -----------------------------------------------------
 logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] psum_buf_wr_addr, psum_buf_rd_addr;
 logic [PSUM_WIDTH - 1 : 0][5:0] psum_buf_data_in, psum_buf_data_out;
@@ -211,7 +284,7 @@ generate
     for( i = 5; i >=0; i--)begin:add_for_psum_buf
         logic [PSUM_WIDTH - 1 : 0] tmp_add_a;
         always_comb bias_to_add[i] = {24'd0,bias_i};
-        always_comb tmp_add_a = count_c == 1 ? bias_to_add[i] : add_ans[i];
+        always_comb tmp_add_a = count_c == 1 ? bias_to_add[i] : add_ans_2[i];
         adder #(
             .WIDTH(PSUM_WIDTH)
         )adder_psum(
@@ -238,24 +311,21 @@ always_ff@(posedge clk or negedge rst_n)
             psum_buf_ping_pong
         } <= '0;
     else if (psum_valid)begin
-        if (psum_buf_wr_addr == (w_num * h_num - 1)) psum_buf_wr_addr <= 0;
+        if (psum_buf_wr_addr == (w_num * h_num - 1)) psum_buf_wr_addr <= 0;                 //whether the synthesis tool will optimise this?
         else psum_buf_wr_addr++;
-        if(count_c == 0 && count_h == 0 && count_w == 0) begin
+        if(count_c == 0 && count_h == 0 && count_w < 6) begin
             psum_buf_ping_pong <= ~psum_buf_ping_pong;  //++ ok?
         end
     end
-// for bias
-always_comb bias_en_o = count_c == 1 && psum_almost_valid;
 
 // - relu_guard_write_back ----------------------------------------------------
 logic write_back_valid;                                       ///ready output
-logic [15:0] pace;
-always_comb pace = h_num * w_num;
 relu_guard_write_back inst_relu_guard_write_back(
     .ctrl_valid          (write_back_valid),       
-    .ctrl_ready          (write_back_ready),       
+    .ctrl_ready          (write_back_ready),                                                    // no connection now 
     .ctrl_finish         (write_back_finish),    
-    .pace_i              (pace),
+    .h_num_i             (h_num),
+    .w_num_i             (w_num),
     .bit_mode_i          (bit_mode),
     .data_i              (psum_buf_data_out),   
     .addr_o              (psum_buf_rd_addr),   
@@ -274,7 +344,7 @@ always_ff@(posedge clk or negedge rst_n)
         } <= '0;
     else begin
         write_back_valid <= 0;
-        if(count_c == 0 && count_h == 0 && count_w == 0 && psum_valid) begin
+        if(count_c == 0 && count_h == 0 && count_w < 6 && psum_valid) begin
             write_back_valid <= 1;
         end
     end

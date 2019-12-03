@@ -12,7 +12,7 @@ Notes:
 
 TODO:
 =========================================================*/
-import diff_core_pkg::*;
+import diff_demo_pkg::*;
 module fm_guard_gen_ctrl(
     input  logic        clk,
     input  logic        rst_n,
@@ -23,7 +23,7 @@ module fm_guard_gen_ctrl(
     input  logic [7:0]  w_num_i,            //less bit?
     input  logic [7:0]  h_num_i,
     input  logic [7:0]  c_num_i ,
-    input  logic        kernal_mode_i,
+    input  logic        kernel_mode_i,
     input  logic        bit_mode_i,
     //
     input               psum_almost_valid,
@@ -31,12 +31,12 @@ module fm_guard_gen_ctrl(
     output logic [7:0]  w_num,
     output logic [7:0]  h_num,
     output logic [7:0]  c_num,
-    output logic        kernal_mode,
+    output logic        kernel_mode,
     output logic        bit_mode,
     output logic [7:0]  count_w,
     output logic [7:0]  count_h,
     output logic [7:0]  count_c,
-    output logic        tick_tock,        //distinguish odd and even lines
+    output logic        is_even_row,        //distinguish odd and even lines
     output logic        is_even_even_row,
     output logic [1:0]  count_3
 );
@@ -49,7 +49,7 @@ always_ff@(posedge clk or negedge rst_n)
         ctrl_finish <= 0;
         if (ctrl_valid && ctrl_ready)     ctrl_ready <= 0;
         if (ctrl_finish && !ctrl_ready)   ctrl_ready <= 1;
-        if (count_w == 0 && count_h == 0 && count_c == 0) ctrl_finish <= 1;
+        if (count_w < 6 && count_h == 0 && count_c == 0) ctrl_finish <= 1;
     end
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)
@@ -57,14 +57,14 @@ always_ff@(posedge clk or negedge rst_n)
             w_num,
             h_num,
             c_num,
-            kernal_mode,
+            kernel_mode,
             bit_mode
         } <= '0;
     else if (ctrl_ready && ctrl_valid) begin
-        w_num           <= w_num_i; 
+        w_num           <= w_num_i;         
         h_num           <= h_num_i;
         c_num           <= c_num_i;
-        kernal_mode     <= kernal_mode_i;
+        kernel_mode     <= kernel_mode_i;
         bit_mode        <= bit_mode_i;
     end
 // - counter for local ctrl ---------------------------------------------------------
@@ -74,7 +74,7 @@ always_ff@(posedge clk or negedge rst_n)
             count_w,
             count_h,
             count_c,
-            tick_tock,
+            is_even_row,
             count_3,
             is_even_even_row
         } <= '0;
@@ -83,24 +83,22 @@ always_ff@(posedge clk or negedge rst_n)
             count_w     <= w_num_i; 
             count_h     <= h_num_i;
             count_c     <= c_num_i + 1;         //bias
-            tick_tock   <= 0;
+            is_even_row   <= 0;
             count_3     <= '0;
         end else if(psum_almost_valid)begin
-            if (count_w == 0 && count_h == 0 && count_c == 2) begin
+            if(count_w < 6 && count_h == 0) begin
                 count_c --;
                 count_h <= h_num;
-            end else if(count_w == 0 && count_h == 0) begin
-                count_c --;
-                count_h <= h_num;
-            end else if (count_w == 0) begin
-                count_w <= w_num;
-                tick_tock ++;
-                if(tick_tock) is_even_even_row ++;
-                if(kernal_mode && tick_tock || !kernal_mode) begin
+            end else if (count_w < 6) begin
+                count_w <= w_num + 6;       // avoid negetive value             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                count_h --;
+                is_even_row ++;
+                if(is_even_row) is_even_even_row ++;
+                if(kernel_mode && is_even_row || !kernel_mode) begin
                     count_3  <= count_3 == 2'd2 ? '0 : count_3 + 1;
                 end
             end else 
-                count_w --;
+                count_w -= 6;
         end
     end
 

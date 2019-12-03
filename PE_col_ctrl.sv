@@ -12,16 +12,16 @@ Notes:
 
 TODO:
 =========================================================*/
-import diff_core_pkg::*;
+import diff_demo_pkg::*;
 module PE_col_ctrl(
     input  logic                clk,
     input  logic                rst_n,
     //
-    input  logic                valid,
-    output logic                ready,
-    output logic                finish,
+    input  logic                ctrl_valid,
+    output logic                ctrl_ready,
+    output logic                ctrl_finish,
     input  logic                bit_mode_i,   
-    input  logic                kernal_mode_i,
+    input  logic                kernel_mode_i,
     input  logic [5:0]          guard_map_i,
     input  logic                is_odd_row_i,
     input  logic                end_of_row_i,
@@ -39,32 +39,32 @@ module PE_col_ctrl(
 PE_state_t next_state;
 logic [5 : 0]                            guard_map;
 logic                                    is_odd_row;
-logic                                    kernal_mode;
+logic                                    kernel_mode;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
-        ready   <= 1;
-        finish  <= 0;
+        ctrl_ready   <= 1;
+        ctrl_finish  <= 0;
     end else begin
-        if (valid  && ready )     ready  <= 0;
-        if (finish  && !ready )   ready  <= 1;
-        if (fifo_full  && ready )    ready  <= 0;          //?
-        if (fifo_full  && !ready )   ready  <= 1;
-        finish  <= 0;
+        if (ctrl_valid  && ctrl_ready )     ctrl_ready  <= 0;
+        if (ctrl_finish  && !ctrl_ready )   ctrl_ready  <= 1;
+        if (fifo_full  && ctrl_ready )    ctrl_ready  <= 0;          //?
+        if (fifo_full  && !ctrl_ready )   ctrl_ready  <= 1;
+        ctrl_finish  <= 0;
         case(state)
             IDLE:
-                if(valid  && ready  && guard_map_i == 0) finish  <= 1;
+                if(ctrl_valid  && ctrl_ready  && guard_map_i == 0) ctrl_finish  <= 1;
             ONE:
-                if(guard_map[4:0] == 0) finish  <= 1;
+                if(guard_map[4:0] == 0) ctrl_finish  <= 1;
             TWO:
-                if(guard_map[3:0] == 0) finish  <= 1;
+                if(guard_map[3:0] == 0) ctrl_finish  <= 1;
             THREE:
-                if(guard_map[2:0] == 0) finish  <= 1;
+                if(guard_map[2:0] == 0) ctrl_finish  <= 1;
             FOUR:
-                if(guard_map[1:0] == 0) finish  <= 1;
+                if(guard_map[1:0] == 0) ctrl_finish  <= 1;
             FIVE:
-                if(guard_map[0] == 0) finish  <= 1;
+                if(guard_map[0] == 0) ctrl_finish  <= 1;
             SIX:
-                finish  <= 1;
+                ctrl_finish  <= 1;
         endcase 
     end
 
@@ -73,21 +73,21 @@ always_ff@(posedge clk or negedge rst_n)
         {
             guard_map,
             is_odd_row,
-            kernal_mode,
+            kernel_mode,
             bit_mode,
             end_of_row
         } <= '0;
     else begin
-    if (valid  && ready ) begin
+    if (ctrl_valid  && ctrl_ready ) begin
             guard_map   <= bit_mode_i ? '1 : guard_map_i;                   //dense when 4bit !!!!!
             bit_mode    <= bit_mode_i;
             is_odd_row  <= is_odd_row_i;
-            kernal_mode <= kernal_mode_i;
+            kernel_mode <= kernel_mode_i;
             end_of_row   <= end_of_row_i;
         end
     end
 // activation_en_o
-always_comb activation_en_o  = state == IDLE && !(valid  && ready ) ? 0 : 1;
+always_comb activation_en_o  = state == IDLE && !(ctrl_valid  && ctrl_ready ) ? 0 : 1;
 // - state & mode ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) state <= IDLE;
@@ -97,7 +97,7 @@ always_ff@(posedge clk or negedge rst_n)
 always_comb 
     case(state)
         IDLE:
-            if(valid && ready)
+            if(ctrl_valid && ctrl_ready)
                 case(guard_map_i)
                     6'b1?????: next_state <= ONE;
                     6'b01????: next_state <= TWO;
@@ -145,7 +145,7 @@ always_comb
     endcase
 // weight mode
 always_comb 
-    if(kernal_mode == 0) weight_mode = E_MODE;
+    if(kernel_mode == 0) weight_mode = E_MODE;
     else 
         case(state)
             ONE,THREE,FIVE: 

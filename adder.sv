@@ -10,7 +10,7 @@ Modify:
 Notes:
 1. 
 =========================================================*/
-`include "diff_core_pkg.sv"
+import diff_demo_pkg::*;
 module adder#(
     parameter WIDTH = 32
 )(

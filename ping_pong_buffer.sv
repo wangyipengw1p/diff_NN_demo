@@ -8,7 +8,7 @@ Yipeng   wangyipengv@outlook.com  20191127
 Modify:
 
 Notes:
-1. 
+1. ping pong means read ping pong
 
 TODO:
 =========================================================*/
@@ -33,10 +33,10 @@ module ping_pong_buffer#(
   always @(posedge clka)
     if (ena)
       if (wea)
-        BRAM[{ping_pong, addra}] <= dina;
+        BRAM[{~ping_pong, addra}] <= dina;
 
   always @(posedge clkb)
     if (enb)
-        doutb <= BRAM[{~ping_pong,addrb}];
+        doutb <= BRAM[{ping_pong,addrb}];
 
 endmodule
