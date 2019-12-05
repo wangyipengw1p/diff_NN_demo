@@ -35,7 +35,7 @@ module core_top_ctrl(
     output logic [CONF_PE_COL - 1 : 0]                                                          bit_mode,             
     output logic [CONF_PE_COL - 1 : 0]                                                          kernel_mode,
     output logic [CONF_PE_COL - 1 : 0]                                                          is_odd_row,
-    output logic [CONF_PE_COL - 1 : 0]                                                          end_of_row,
+    output logic [CONF_PE_COL - 1 : 0]                                                          end_of_row,//not used
     output logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   activation,
     input  logic [CONF_PE_COL - 1 : 0]                                                          activation_en,//?
     output logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   guard_map,   
@@ -86,7 +86,7 @@ genvar i, j;
 // - ctrl protcol -----------------------------------------------------
 logic core_fm_ping_pong;
 logic core_bit_mode;
-logic one_layer_finish, finish_all,one_co_finish;
+logic one_layer_finish, finish_all;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
         core_ready   <= 1;
@@ -192,17 +192,17 @@ always_comb begin
 end
 
 always_comb begin
-    fm_ping_pong = ping_pong_now;
-    gd_ping_pong = ping_pong_now;
+    fm_ping_pong = core_ready ? load_fm_ping_pong : ping_pong_now;
+    gd_ping_pong = core_ready ? load_gd_ping_pong :ping_pong_now;
 end
 // - In PE matrix ctrl --------------------------------------------------
 
 logic [CONF_PE_COL - 1 : 0] col_finish_input_for_a_layer;
 logic input_one_layer_finish;
-always_comb fm_guard_gen_ctrl_valid = state == START || state == FINISH_ONE_LAYER;      //?
+always_comb fm_guard_gen_ctrl_valid = state == START;      //?
 always_comb input_one_layer_finish = &col_finish_input_for_a_layer;
 generate
-for(j = CONF_PE_COL; j >=0; j--)begin:fm_gd_in
+for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
     //counters
     logic [7:0] count_w, count_h, count_co, count_ci;
     always_ff@(posedge clk or negedge rst_n)
@@ -210,6 +210,7 @@ for(j = CONF_PE_COL; j >=0; j--)begin:fm_gd_in
         {
             count_w, count_h, count_ci, count_co
         } <= '0;
+        is_odd_row[j] <= 1;
         end else begin
             if(state == START ) begin
                 count_w  <= w_num;
@@ -228,6 +229,7 @@ for(j = CONF_PE_COL; j >=0; j--)begin:fm_gd_in
                 end else if (count_w == 1)begin
                     count_w <= w_num;
                     count_h --;
+                    is_odd_row[j] <= ~is_odd_row[j];
                 end else count_w --;
             end
         end
@@ -255,55 +257,95 @@ for(j = CONF_PE_COL; j >=0; j--)begin:fm_gd_in
         end
 end
 endgenerate
-// - fm and gd write signals -------------------------------------------------
+// - out PE matrix, fm and gd write signals, finish logic-------------------------------------------------
 logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                ctrl_fm_wr_addr;
 logic [7 : 0][CONF_PE_COL - 1 : 0]                                            ctrl_fm_din;
-logic [CONF_PE_COL - 1 : 0]                                                   ctrl_fm_wr_en;          
-logic [CONF_PE_COL - 1 : 0]                                                   ctrl_fm_ping_pong;
+logic [CONF_PE_COL - 1 : 0]                                                   ctrl_fm_wr_en;      
 logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]             ctrl_gd_wr_addr;
 logic [5 : 0][CONF_PE_COL - 1 : 0]                                            ctrl_gd_din;
-logic [CONF_PE_COL - 1 : 0]                                                   ctrl_gd_wr_en;          
-logic [CONF_PE_COL - 1 : 0]                                                   ctrl_gd_ping_pong;
+logic [CONF_PE_COL - 1 : 0]                                                   ctrl_gd_wr_en;      
+logic [CONF_PE_ROW - 1 : 0]                                                   wr_back_finish; //all row finish, then one layer finish
+always_comb     one_layer_finish = &wr_back_finish;
 always_comb 
     if(core_ready) begin        //not run
         fm_wr_addr  = ctrl_fm_wr_addr;
         fm_din      = ctrl_fm_din;
         fm_wr_en    = ctrl_fm_wr_en;
-        fm_ping_pong= ctrl_fm_ping_pong;
         gd_wr_addr  = ctrl_gd_wr_addr;
         gd_din      = ctrl_gd_din;
         gd_wr_en    = ctrl_gd_wr_en;
-        gd_ping_pong= ctrl_gd_ping_pong;
     end else begin
         fm_wr_addr  = load_fm_wr_addr;
         fm_din      = load_fm_din;
         fm_wr_en    = load_fm_wr_en;   
-        fm_ping_pong= load_fm_ping_pong;
         gd_wr_addr  = load_gd_wr_addr;
         gd_din      = load_gd_din;
         gd_wr_en    = load_gd_wr_en;   
-        gd_ping_pong= load_gd_ping_pong;
     end
-// - finish logic -------------------------------------------------------------------
-logic [CONF_PE_ROW - 1 : 0] wr_back_finish; 
-logic all_row_wr_back_finish;
-logic count_co;
-always_comb all_row_wr_back_finish = & wr_back_finish;
-generate 
-for(i = CONF_PE_ROW; i >= 0; i--)begin:gen_row
+generate
+for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
+    logic [7:0] count_co;
+    logic [7:0] now_write_back_port;
+    logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0] fm_addr;
+    logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0] gd_addr;
+    // count and write port
     always_ff@(posedge clk or negedge rst_n)
-        if(!rst_n) wr_back_finish[i] <= 0;
-        else begin
-            if(write_back_finish[i]) wr_back_finish <= 1;
-            if(all_row_wr_back_finish) wr_back_finish <= 0;
+    if(!rst_n) {
+        count_co,
+        now_write_back_port,
+        wr_back_finish[i]
+    } <= '0;
+    else begin
+        if(state == START) begin
+            count_co <= i;
+            now_write_back_port <= CONF_PE_ROW - i - 1;
+        end else if (write_back_finish) begin
+            count_co -= CONF_PE_ROW;
+            now_write_back_port += CONF_PE_ROW;
+        end
+        if(write_back_finish) wr_back_finish[i] <= 1;
+        if(one_layer_finish) wr_back_finish[i] <= 0;
+    end
+    
+    always_ff@(posedge clk or negedge rst_n)
+        if(!rst_n) begin
+        {
+            fm_addr,
+            gd_addr
+        } <= '0;
+        end else begin
+            if(fm_write_back_data_o_valid) fm_addr++;
+            if(guard_o_valid) gd_addr++;
+            if(write_back_finish)begin
+                fm_addr <= '0;
+                gd_addr <= '0;
+            end
         end
 end
+// MUX, but ok?
 endgenerate
-always_ff@(posedge clk or negedge rst_n)
-    if(!rst_n) count_co <= '0;
-    else if (state == START || state == FINISH_ONE_LAYER) count_co <= co_num;
-    else if (all_row_wr_back_finish) count_co -= CONF_PE_ROW;
-//
-always_comb one_layer_finish = count_co <= CONF_PE_ROW && all_row_wr_back_finish;
-
+generate
+for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_write_back_din_en_mux
+    for(i = CONF_PE_ROW - 1; i >= 0; i--) begin:mux_per_bank
+        if(gen_write_back_ctrl[i].now_write_back_port == j)
+            always_comb begin
+                fm_wr_addr[j]   = gen_write_back_ctrl[i].fm_addr;
+                gd_wr_addr[j]   = gen_write_back_ctrl[i].gd_addr;
+                fm_wr_en[j]     = fm_write_back_data_o_valid[i];
+                gd_wr_en[j]     =  guard_o_valid[i];
+                fm_din[j]       = fm_write_back_data[i];
+                gd_din[j]       = guard_o[i];
+            end 
+        else 
+            always_comb {
+                fm_wr_addr[j],
+                gd_wr_addr[j],
+                fm_wr_en[j]  ,
+                gd_wr_en[j]  ,
+                fm_din[j]    ,
+                gd_din[j]    
+            } = '0;
+    end
+end
+endgenerate
 endmodule

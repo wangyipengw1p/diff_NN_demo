@@ -19,7 +19,7 @@ module PE (
     //
     input  PE_state_t                               state,
     input  PE_weight_mode_t                         weight_mode,
-    input  logic                                    finish_i,
+    output logic                                    finish,
     input  logic                                    end_of_row,
     input  logic [25 * 8 - 1 : 0]                   weight_i,
     //
@@ -37,7 +37,7 @@ genvar i, j;
 logic [PSUM_WIDTH - 1 : 0][2 : 0][7 : 0] pre_psum;
 
 // special for 5*5 kernel
-logic tick_tock;    
+logic tick_tock;            // even or odd row
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) 
         tick_tock <= 0;

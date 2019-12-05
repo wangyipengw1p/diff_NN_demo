@@ -51,8 +51,8 @@ module PE_matrix(
     output logic        [CONF_PE_ROW - 1 : 0]           guard_o_valid          
 );
 genvar i, j;
-// - ctrl - for each collum ---------------------------------------------------------------------
-// the following generate if for a collum
+// - ctrl - for each column ---------------------------------------------------------------------
+// the following generate if for a column
 logic [CONF_PE_COL - 1 : 0] connect_PE_col_ctrl_finish;
 PE_state_t                  connect_state       [CONF_PE_COL - 1 : 0];
 PE_weight_mode_t            connect_weight_mode [CONF_PE_COL - 1 : 0];
@@ -82,7 +82,7 @@ generate
 endgenerate
 
 // - PEs and adder tree ----------------------------------------------------------------
-logic [PSUM_WIDTH - 1 : 0][CONF_PE_ROW - 1 : 0] psum_ans;
+logic [3*6*PSUM_WIDTH - 1 : 0][CONF_PE_ROW - 1 : 0] psum_ans;
 logic [CONF_PE_ROW - 1 : 0] psum_almost_valid;
 // generate COL * ROW of PE
 generate
@@ -90,7 +90,6 @@ generate
         logic                           fifo_rd_en;
         logic [CONF_PE_COL - 1 : 0]     fifo_empty;
         logic [CONF_PE_COL - 1 : 0]     fifo_full;
-        logic [3*6*PSUM_WIDTH - 1 : 0]  psum_tmp;
         always_comb fifo_rd_en = ~|fifo_empty;                      // && psum gen ready
         for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_row
             logic [3*6*PSUM_WIDTH - 1:0] fifo_dout;
@@ -98,7 +97,7 @@ generate
                 .*,
                 .state          (connect_state[j]),
                 .weight_mode    (connect_weight_mode[j]),
-                .finish_i       (connect_PE_col_ctrl_finish[j]),
+                .finish         (connect_PE_col_ctrl_finish[j]),
                 .end_of_row     (connect_end_of_row[j]),
                 .weight_i       (weight_i[i][j]), 
                 .activation_i   (activation_i[j]),
@@ -108,10 +107,22 @@ generate
                 .fifo_empty_o   (fifo_empty[j]),
                 .fifo_full_o    (fifo_full[j])
             );
-            always_comb psum_tmp = psum_tmp + fifo_dout;                //could be optimised for less logic;       adder tree? ok here?
         end
-
-        always_comb psum_ans[i] = psum_tmp;
+        // adder tree
+        logic [CONF_PE_COL*PSUM_WIDTH - 1 : 0][17 : 0] to_add;
+        for(genvar k = 17; k >= 0; k--)begin:gen_18_adder_tree
+            for(genvar m = CONF_PE_COL - 1; m >= 0; m--)begin:trans_to_add_matrix
+                always_comb to_add[k][m] = inst_row[m].fifo_dout[(k+1)*PSUM_WIDTH - 1 -: PSUM_WIDTH];
+            end
+            adder_tree #(
+                .IN_WIDTH(PSUM_WIDTH),
+                .NUM(CONF_PE_COL),
+                .OUT_WIDTH(PSUM_WIDTH)
+            ) inst_adder_tree(
+                .a(to_add[k]),
+                .ans(psum_ans[i][(k+1)*PSUM_WIDTH - 1 -: PSUM_WIDTH])
+            );
+        end
         always_comb psum_almost_valid[i] = fifo_rd_en;     //will be valid next clk cycle
     end
 endgenerate

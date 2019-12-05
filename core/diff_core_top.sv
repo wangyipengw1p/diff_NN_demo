@@ -11,6 +11,7 @@ Notes:
 1. 
 
 TODO:
+
 =========================================================*/
 import diff_demo_pkg::*;
 module diff_core_top(
@@ -25,19 +26,19 @@ module diff_core_top(
     //
     input  logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       load_fm_wr_addr,
     input  logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   load_fm_din,
-    input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en,         //rd_en for energy save
+    input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en,         
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_ping_pong,
     input  logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    load_gd_wr_addr,
     input  logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   load_gd_din,
-    input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en,         //rd_en for energy save
+    input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en,         
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_ping_pong,
     //
     input  logic [$clog2(CONF_WT_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]  load_wt_wr_addr,
     input  logic [5 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                              load_wt_din,
-    input  logic [CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                                     load_wt_wr_en,         //rd_en for energy save
+    input  logic [CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                                     load_wt_wr_en,         
     input  logic [$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0][CONF_PE_ROW - 1 : 0]                     load_bias_wr_addr,
     input  logic [5 : 0][CONF_PE_ROW - 1 : 0]                                                   load_bias_din,
-    input  logic [CONF_PE_ROW - 1 : 0]                                                          load_bias_wr_en         //rd_en for energy save
+    input  logic [CONF_PE_ROW - 1 : 0]                                                          load_bias_wr_en         
 
 );
 // - signals -----------------!! the same name with the ctrl !!--------------
