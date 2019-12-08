@@ -28,6 +28,8 @@ module fm_guard_gen(
     input  logic [7:0]                          count_w,
     input  logic [7:0]                          count_h,
     input  logic [7:0]                          count_c,
+    input  logic                                is_diff,
+    input  logic                                is_first,
     input  logic                                is_even_row,              //distinguish odd and even lines
     input  logic                                is_even_even_row,         // 0 0 1 1 0 0 1 1 0 0 ...
     input  logic [1:0]                          count_3,
@@ -61,8 +63,7 @@ two_port_mem #(
     .BIT_LENGTH(3*6*PSUM_WIDTH),
     .DRPTH(FM_GUARD_GEN_TMP_BUF_DEPTH)
 ) tmp_buf_1 (
-    .clka       (clk),
-    .clkb       (clk),
+    .*,
     .addra      (buf_addr),
     .addrb      (buf_addr),
     .dina       (buf_data_in),
@@ -75,8 +76,7 @@ two_port_mem #(
     .BIT_LENGTH(3*6*PSUM_WIDTH),
     .DRPTH(FM_GUARD_GEN_TMP_BUF_DEPTH)
 ) tmp_buf_2 (
-    .clka       (clk),
-    .clkb       (clk),
+    .*,
     .addra      (buf_addr),
     .addrb      (buf_addr),
     .dina       (buf_data_in),
@@ -260,22 +260,23 @@ end
 logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] psum_buf_wr_addr, psum_buf_rd_addr;
 logic [PSUM_WIDTH - 1 : 0][5:0] psum_buf_data_in, psum_buf_data_out;
 logic [PSUM_WIDTH - 1 : 0][5:0] psum_add_ans, psum_add_ans_for_4_bit;
-logic psum_buf_ping_pong;
-logic psum_buf_rd_en;
+logic psum_buf_ping_pong, psum_buf_wr_en;
 logic [PSUM_WIDTH - 1 : 0][5:0] bias_to_add;
-always_comb psum_buf_data_in = bit_mode ? psum_add_ans_for_4_bit : psum_add_ans;
+logic [PSUM_WIDTH - 1 : 0][5:0] after_diff;
+logic psum_buf_wr_addr_dont_increase;
+always_comb psum_buf_data_in = bit_mode ? count_c  == 0  ?  after_diff : psum_add_ans_for_4_bit : psum_add_ans;
+always_comb psum_buf_wr_en = ~psum_buf_wr_addr_dont_increase;
 ping_pong_buffer #(
     .BIT_LENGTH(6*PSUM_WIDTH),
     .DRPTH(FM_GUARD_GEN_PSUM_BUF_DEPTH)
 ) psum_buf (
-    .clka       (clk),
-    .clkb       (clk),
+    .*,
     .addra      (psum_buf_wr_addr),
     .addrb      (psum_buf_rd_addr),
     .dina       (psum_buf_data_in),
     .wea        (psum_buf_wr_en),
     .ena        ('1),
-    .enb        (psum_buf_rd_en),
+    .enb        ('1),
     .doutb      (psum_buf_data_out),
     .ping_pong  (psum_buf_ping_pong)
 );
@@ -284,7 +285,7 @@ generate
     for( i = 5; i >=0; i--)begin:add_for_psum_buf
         logic [PSUM_WIDTH - 1 : 0] tmp_add_a;
         always_comb bias_to_add[i] = {24'd0,bias_i};
-        always_comb tmp_add_a = count_c == 1 ? bias_to_add[i] : add_ans_2[i];
+        always_comb tmp_add_a = count_c == 1 ? is_diff && bit_mode ?  after_diff[i] :bias_to_add[i] : add_ans_2[i];
         adder #(
             .WIDTH(PSUM_WIDTH)
         )adder_psum(
@@ -310,27 +311,88 @@ always_ff@(posedge clk or negedge rst_n)
             psum_buf_wr_addr,
             psum_buf_ping_pong
         } <= '0;
-    else if (psum_valid)begin
+    else if (psum_buf_wr_addr_dont_increase); //do nothing
+    else begin
         if (psum_buf_wr_addr == (w_num * h_num - 1)) psum_buf_wr_addr <= 0;                 //whether the synthesis tool will optimise this?
         else psum_buf_wr_addr++;
-        if(count_c == 0 && count_h == 0 && count_w < 6) begin
+        if(count_c == 0 && count_h == 0 && count_w < 6 && bit_mode) begin
             psum_buf_ping_pong <= ~psum_buf_ping_pong;  //++ ok?
         end
     end
+always_comb 
+    if (count_c == 1) 
+        psum_buf_wr_addr_dont_increase =  0;
+    else if(kernel_mode)  //5*5
+        psum_buf_wr_addr_dont_increase =  count_h >= h_num - 4 || count_h[0] == 0 ? 1 : 0;
+    else //3*3
+        psum_buf_wr_addr_dont_increase = count_h >= h_num - 2 ? 1 : 0;
+    
 
+// - diff process -------------------------------------------------------------
+logic [PSUM_WIDTH - 1 : 0][5:0] after_sum_with_diff, after_sum_with_diff_and_relu;
+logic [PSUM_WIDTH - 1 : 0][5:0] ref_after_relu, minus_ref_after_relu;
+generate 
+    for( i = 5; i >=0; i--)begin:add_for_diff_process
+        adder #(
+            .WIDTH(PSUM_WIDTH)
+        ) add_ref (
+            .a({{PSUM_WIDTH-8{ref_buf_data_out[i][7]}}, ref_buf_data_out[i]}),
+            .b(psum_buf_data_out[i]),
+            .ans(after_sum_with_diff[i])
+        );
+        //relu
+        always_comb after_sum_with_diff_and_relu[i] = after_sum_with_diff[i][PSUM_WIDTH-1] == 1 ?  '0 : after_sum_with_diff_and_relu[i];
+        always_comb ref_after_relu[i] = ref_after_relu[i][7]  ==  1 ?  '0 : {{PSUM_WIDTH-8{1'b0}}, ref_after_relu[i]};
+        always_comb minus_ref_after_relu[i] = ~ref_after_relu[i] + 1;
+        adder #(
+            .WIDTH(PSUM_WIDTH)
+        ) minus_after_relu (
+            .a(after_sum_with_diff_and_relu[i]),
+            .b(minus_ref_after_relu[i]),
+            .ans(after_diff[i])
+        );
+
+    end
+endgenerate
+
+// - ref buf ------------------------------------------------------------------
+// 8 bit for ref, maybe not desired
+logic [$clog2(FM_GUARD_GEN_REF_BUF_DEPTH) - 1 : 0] ref_buf_addr;
+logic [7 : 0][5:0] ref_buf_data_in, ref_buf_data_out;
+logic ref_buf_wr_en;
+logic is_first_d;
+two_port_mem #(
+    .BIT_LENGTH(6*8),
+    .DRPTH(FM_GUARD_GEN_REF_BUF_DEPTH)
+) ref_buf (
+    .*,
+    .addra      (ref_buf_addr),
+    .addrb      (ref_buf_addr),
+    .dina       (ref_buf_data_in),
+    .wea        (ref_buf_wr_en),
+    .ena        ('1),
+    .enb        ('1),
+    .doutb      (ref_buf_data_out)
+);
+always_ff@(posedge clk or negedge rst_n)
+    if(!rst_n) {ref_buf_addr, is_first_d} <=  '0;
+    else begin
+        if(is_first && !is_first_d) ref_buf_addr <=  '0;
+        else if(count_c == 1 && bit_mode)ref_buf_addr++;
+    end
+always_comb ref_buf_wr_en = count_c == 1 && bit_mode ?  1 : 0;
 // - relu_guard_write_back ----------------------------------------------------
 logic write_back_valid;                                       ///ready output
 relu_guard_write_back inst_relu_guard_write_back(
     .ctrl_valid          (write_back_valid),       
     .ctrl_ready          (write_back_ready),                                                    // no connection now 
     .ctrl_finish         (write_back_finish),    
-    .h_num_i             (h_num),
-    .w_num_i             (w_num),
+    .stop_addr_i         (psum_buf_wr_addr),
     .bit_mode_i          (bit_mode),
+    .is_diff_i           (is_diff),
     .data_i              (psum_buf_data_out),   
     .addr_o              (psum_buf_rd_addr),   
     .data_o              (write_back_data_o), 
-    .rd_en               (psum_buf_rd_en),  
     .fm_buf_ready        (fm_buf_ready),           
     .data_o_valid        (write_back_data_o_valid),           
     .guard_o             (guard_o),       

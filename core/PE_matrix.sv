@@ -32,6 +32,8 @@ module PE_matrix(
     input  logic [7 : 0 ]                               c_num_i,
     input  logic [CONF_PE_COL - 1 : 0]                  bit_mode_i,             //0: normal 8-bit  1: 2-4bit, no reg
     input  logic [CONF_PE_COL - 1 : 0]                  kernel_mode_i,   
+    input  logic                                        is_diff_i,
+    input  logic                                        is_first_i,
     input  logic [CONF_PE_COL - 1 : 0]                  is_odd_row_i,
     input  logic [CONF_PE_COL - 1 : 0]                  end_of_row_i, 
     //
@@ -110,8 +112,8 @@ generate
         end
         // adder tree
         logic [CONF_PE_COL*PSUM_WIDTH - 1 : 0][17 : 0] to_add;
-        for(genvar k = 17; k >= 0; k--)begin:gen_18_adder_tree
-            for(genvar m = CONF_PE_COL - 1; m >= 0; m--)begin:trans_to_add_matrix
+        for(genvar k = 17; k >= 0; k--)begin:gen_18_adder_tree      //3*6 adder
+            for(genvar m = CONF_PE_COL - 1; m >= 0; m--)begin:trans_to_add_matrix   //comb transform
                 always_comb to_add[k][m] = inst_row[m].fifo_dout[(k+1)*PSUM_WIDTH - 1 -: PSUM_WIDTH];
             end
             adder_tree #(
@@ -136,29 +138,33 @@ logic [7:0]  connect_count_w;
 logic [7:0]  connect_count_h;
 logic [7:0]  connect_count_c;
 logic        connect_is_even_row;
+logic        connect_is_diff;
 logic        connect_is_even_even_row;
 logic [1:0]  connect_count_3;
 // fm_guard_gen_col_control
 fm_guard_gen_ctrl inst_fm_guard_gen_ctrl(
     .*,
-    .ctrl_valid       (fm_guard_gen_ctrl_valid        ),      //add in top
-    .ctrl_ready       (fm_guard_gen_ctrl_ready        ),      
-    .ctrl_finish      (fm_guard_gen_ctrl_finish       ),          
-    .w_num_i          (w_num_i      ),          
-    .h_num_i          (h_num_i      ),      
-    .c_num_i          (c_num_i      ),      
+    .ctrl_valid       (fm_guard_gen_ctrl_valid),      //add in top
+    .ctrl_ready       (fm_guard_gen_ctrl_ready),      
+    .ctrl_finish      (fm_guard_gen_ctrl_finish),          
+    .w_num_i          (w_num_i),          
+    .h_num_i          (h_num_i),      
+    .c_num_i          (c_num_i),      
     .kernel_mode_i    (kernel_mode_i),          
-    .bit_mode_i       (bit_mode_i   ),     
+    .bit_mode_i       (bit_mode_i), 
+    .is_diff_i        (is_diff_i),    
+    .is_first_i (is_first_i),
     .psum_almost_valid(psum_almost_valid[CONF_PE_ROW - 1]),
     .w_num            (connect_w_num),  
     .h_num            (connect_h_num),  
     .c_num            (connect_c_num),  
+    .is_diff          (connect_is_diff),
     .kernel_mode      (connect_kernel_mode),          
     .bit_mode         (connect_bit_mode),      
     .count_w          (connect_count_w),      
     .count_h          (connect_count_h),      
     .count_c          (connect_count_c),      
-    .is_even_row        (connect_is_even_row),          
+    .is_even_row      (connect_is_even_row),          
     .is_even_even_row (connect_is_even_even_row),              
     .count_3          (connect_count_3)     
 );
@@ -174,7 +180,7 @@ generate
             .count_w                  (connect_count_w),     
             .count_h                  (connect_count_h),     
             .count_c                  (connect_count_c),     
-            .is_even_row                (connect_is_even_row),                     
+            .is_even_row              (connect_is_even_row),                     
             .is_even_even_row         (connect_is_even_even_row),             
             .count_3                  (connect_count_3),     
             .psum_almost_valid        (psum_almost_valid[i]),             

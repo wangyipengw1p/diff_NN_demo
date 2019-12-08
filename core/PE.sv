@@ -64,7 +64,7 @@ generate
             .b(mul_b[i]),
             .ans(mul_ans[i])
         );
-        always_comb mul_ans_conv[i] = mul_ans[i];
+        always_comb mul_ans_conv[i] = {{PSUM_WIDTH-16{mul_ans[i][15]}},mul_ans[i]};     //sign extenssion
     end
 endgenerate
 //mul assignment: considered balance and energy save
@@ -112,15 +112,15 @@ always_comb begin
             add_b = mul_ans_conv[8:3];
         end
         A_MODE, B_MODE:begin
-            add_a = {pre_psum[8-(state+1 >> 1)], pre_psum[7-(state+1 >> 1)]};
+            add_a = {pre_psum[8-(((state+1)) >> 1)], pre_psum[7-(((state+1)) >> 1)]};
             add_b = mul_ans_conv[8:3];
         end
         C_MODE:begin
-            add_a = {pre_psum[8-(state+1 >> 1)], pre_psum[7-(state+1  >> 1)]};
+            add_a = {pre_psum[8-(((state+1)) >> 1)], pre_psum[7-(((state+1))  >> 1)]};
             add_b = {/*wasted*/mul_ans_conv[0],mul_ans_conv[5:4],/*wasted*/mul_ans_conv[0],mul_ans_conv[3:2]}; // adder[5],adder[2] are wasted
         end  
         D_MODE:begin
-            add_a = {pre_psum[8-(state+1 >> 1)], pre_psum[7-(state+1 >> 1)]};
+            add_a = {pre_psum[8-(((state+1)) >> 1)], pre_psum[7-(((state+1)) >> 1)]};
             add_b = {/*wasted*/mul_ans_conv[0],mul_ans_conv[8:7],/*wasted*/mul_ans_conv[0],mul_ans_conv[1:0]};
         end
     endcase
@@ -142,38 +142,38 @@ always_ff@(posedge clk or negedge rst_n)
             end
             A_MODE: 
                 if(!tick_tock) begin
-                    {pre_psum[8-(state+1 >> 1)],pre_psum[7-(state+1 >> 1)]} <= add_ans;
-                    pre_psum[6-(state+1 >> 1)] <= mul_ans_conv[2:0];
+                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
+                    pre_psum[6-((state+1) >> 1)] <= mul_ans_conv[2:0];
                 end else begin
-                    {pre_psum[5-(state+1 >> 1)],pre_psum[4-(state+1 >> 1)]} <= add_ans;
-                    pre_psum[3-(state+1 >> 1)] <= mul_ans_conv[2:0];
+                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
+                    pre_psum[3-((state+1) >> 1)] <= mul_ans_conv[2:0];
                 end
             B_MODE:
                 if(!tick_tock) 
-                    {pre_psum[8-(state+1 >> 1)],pre_psum[7-(state+1 >> 1)]} <= add_ans;
+                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
                 else 
-                    {pre_psum[5-(state+1 >> 1)],pre_psum[4-(state+1 >> 1)]} <= add_ans;
+                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
             C_MODE:
                 if(!tick_tock) begin
-                    {pre_psum[8-(state+1 >> 1)],pre_psum[7-(state+1 >> 1)]} <= add_ans;
-                    //pre_psum[8-(state+1 >> 1)][2] <= '0;                                //clear: unnecessary
-                    //pre_psum[7-(state+1 >> 1)][2] <= '0;
-                    pre_psum[6-(state+1 >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
+                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
+                    //pre_psum[8-((state+1) >> 1)][2] <= '0;                                //clear: unnecessary
+                    //pre_psum[7-((state+1) >> 1)][2] <= '0;
+                    pre_psum[6-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
                 end else begin
-                    {pre_psum[5-(state+1 >> 1)],pre_psum[4-(state+1 >> 1)]} <= add_ans;
-                    // pre_psum[5-(state+1 >> 1)][2] <= '0;
-                    //pre_psum[4-(state+1 >> 1)][2] <= '0;
-                    pre_psum[3-(state+1 >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
+                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
+                    // pre_psum[5-((state+1) >> 1)][2] <= '0;
+                    //pre_psum[4-((state+1) >> 1)][2] <= '0;
+                    pre_psum[3-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
                 end
             D_MODE:
                 if(!tick_tock) begin
-                    {pre_psum[8-(state+1 >> 1)],pre_psum[7-(state+1 >> 1)]} <= add_ans;
-                    //pre_psum[8-(state+1 >> 1)][2] <= '0;
-                    //pre_psum[7-(state+1 >> 1)][2] <= '0;
+                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
+                    //pre_psum[8-((state+1) >> 1)][2] <= '0;
+                    //pre_psum[7-((state+1) >> 1)][2] <= '0;
                 end else begin
-                    {pre_psum[5-(state+1 >> 1)],pre_psum[4-(state+1 >> 1)]} <= add_ans;
-                    //pre_psum[5-(state+1 >> 1)][2] <= '0;
-                    //pre_psum[4-(state+1 >> 1)][2] <= '0;
+                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
+                    //pre_psum[5-((state+1) >> 1)][2] <= '0;
+                    //pre_psum[4-((state+1) >> 1)][2] <= '0;
                 end
         endcase
     end

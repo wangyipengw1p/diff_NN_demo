@@ -1,6 +1,6 @@
 /*======================================================
 Descripton:
-
+simple two port RAM with single clk
 
 Create:  
 Yipeng   wangyipengv@outlook.com  20191126
@@ -16,8 +16,7 @@ module two_port_mem#(
     parameter BIT_LENGTH = 64,
     parameter DEPTH = 16
 ) (
-    input  logic                             clka,
-    input  logic                             clkb,
+    input  logic                             clk,
     input  logic [$clog2(DEPTH) - 1 : 0 ]    addra,
     input  logic [$clog2(DEPTH) - 1 : 0 ]    addrb,
     input  logic [BIT_LENGTH       - 1 : 0 ] dina,
@@ -29,12 +28,12 @@ module two_port_mem#(
 
     reg [BIT_LENGTH - 1 : 0] BRAM [ (1 << $clog2(DEPTH)) - 1 : 0 ];
 
-  always @(posedge clka)
+  always @(posedge clk)
     if (ena)
       if (wea)
         BRAM[addra] <= dina;
 
-  always @(posedge clkb)
+  always @(posedge clk)
     if (enb)
         doutb <= BRAM[addrb];
 

@@ -25,8 +25,10 @@ module fm_guard_gen_ctrl(
     input  logic [7:0]  c_num_i ,
     input  logic        kernel_mode_i,
     input  logic        bit_mode_i,
+    input  logic        is_diff_i,
+    input  logic        is_first_i,
     //
-    input               psum_almost_valid,
+    input  logic        psum_almost_valid,
     //
     output logic [7:0]  w_num,
     output logic [7:0]  h_num,
@@ -38,6 +40,8 @@ module fm_guard_gen_ctrl(
     output logic [7:0]  count_c,
     output logic        is_even_row,        //distinguish odd and even lines
     output logic        is_even_even_row,
+    output logic        is_diff,
+    output logic        is_first,
     output logic [1:0]  count_3
 );
 // - ctrl and reg ---------------------------------------------------------
@@ -58,7 +62,9 @@ always_ff@(posedge clk or negedge rst_n)
             h_num,
             c_num,
             kernel_mode,
-            bit_mode
+            bit_mode,
+            is_diff,
+            is_first
         } <= '0;
     else if (ctrl_ready && ctrl_valid) begin
         w_num           <= w_num_i;         
@@ -66,6 +72,8 @@ always_ff@(posedge clk or negedge rst_n)
         c_num           <= c_num_i;
         kernel_mode     <= kernel_mode_i;
         bit_mode        <= bit_mode_i;
+        is_diff         <= is_diff_i;
+        is_first         <= is_first_i;
     end
 // - counter for local ctrl ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
@@ -82,7 +90,7 @@ always_ff@(posedge clk or negedge rst_n)
         if (ctrl_ready && ctrl_valid) begin
             count_w     <= w_num_i; 
             count_h     <= h_num_i;
-            count_c     <= c_num_i + 1;         //bias
+            count_c     <= c_num_i ;         //bias
             is_even_row   <= 0;
             count_3     <= '0;
         end else if(psum_almost_valid)begin

@@ -48,7 +48,7 @@ always_ff@(posedge clk or negedge rst_n)
         if (ctrl_valid  && ctrl_ready )     ctrl_ready  <= 0;
         if (ctrl_finish  && !ctrl_ready )   ctrl_ready  <= 1;
         if (fifo_full  && ctrl_ready )    ctrl_ready  <= 0;          //?
-        if (fifo_full  && !ctrl_ready )   ctrl_ready  <= 1;
+        if (!fifo_full  && !ctrl_ready )   ctrl_ready  <= 1;
         ctrl_finish  <= 0;
         case(state)
             IDLE:
@@ -87,7 +87,7 @@ always_ff@(posedge clk or negedge rst_n)
         end
     end
 // activation_en_o
-always_comb activation_en_o  = state == IDLE && !(ctrl_valid  && ctrl_ready ) ? 0 : 1;
+always_comb activation_en_o  = state == IDLE  ? 0 : 1;
 // - state & mode ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) state <= IDLE;

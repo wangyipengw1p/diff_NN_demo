@@ -23,6 +23,7 @@ module diff_core_top(
     output logic                                                                                core_finish,
     input  logic                                                                                core_bit_mode_i,
     input  logic                                                                                core_fm_ping_pong_i,
+    input  logic                                                                                core_is_diff,
     //
     input  logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       load_fm_wr_addr,
     input  logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   load_fm_din,
@@ -55,8 +56,10 @@ logic [7 : 0 ]                                                       h_num;
 logic [7 : 0 ]                                                       c_num;
 logic [CONF_PE_COL - 1 : 0]                                          bit_mode;             
 logic [CONF_PE_COL - 1 : 0]                                          kernel_mode;
+logic                                                                is_diff;
 logic [CONF_PE_COL - 1 : 0]                                          is_odd_row;
-logic [CONF_PE_COL - 1 : 0]                                          end_of_row;
+logic                                                                is_first;
+//logic [CONF_PE_COL - 1 : 0]                                          end_of_row;
 logic [7 : 0][CONF_PE_COL - 1 : 0]                                   activation;
 logic [CONF_PE_COL - 1 : 0]                                          activation_en;
 logic [5 : 0][CONF_PE_COL - 1 : 0]                                   guard_map;     
@@ -76,7 +79,7 @@ logic [7 : 0][CONF_PE_COL - 1 : 0]                                              
 logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   fm_dout;
 logic [CONF_PE_COL - 1 : 0]                                                          fm_rd_en;     
 logic [CONF_PE_COL - 1 : 0]                                                          fm_wr_en;     
-logic [CONF_PE_COL - 1 : 0]                                                          fm_ping_pong;
+//logic [CONF_PE_COL - 1 : 0]                                                          fm_ping_pong;
 // 
 logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    gd_rd_addr;
 logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    gd_wr_addr;
@@ -84,7 +87,7 @@ logic [5 : 0][CONF_PE_COL - 1 : 0]                                              
 logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   gd_din;
 logic [CONF_PE_COL - 1 : 0]                                                          gd_rd_en;     
 logic [CONF_PE_COL - 1 : 0]                                                          gd_wr_en;     
-logic [CONF_PE_COL - 1 : 0]                                                          gd_ping_pong;
+//logic [CONF_PE_COL - 1 : 0]                                                          gd_ping_pong;
 // for weight buf 
 logic [$clog2(CONF_WT_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0] wt_rd_addr;
 logic [5 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                             wt_dout;
@@ -109,6 +112,8 @@ PE_matrix inst_PE_matrix(
     .c_num_i                   (c_num),         
     .bit_mode_i                (bit_mode),             
     .kernel_mode_i             (kernel_mode),     
+    .is_diff_i                 (is_diff),
+    .is_first_i                (is_first),
     .is_odd_row_i              (is_odd_row),     
     .end_of_row_i              (end_of_row),
     .activation_i              (activation),     
@@ -126,7 +131,7 @@ PE_matrix inst_PE_matrix(
 ); 
 generate 
     for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_fm_guard
-        ping_pong_buffer #(
+        two_port_mem #(
             .BIT_LENGTH(8),
             .DEPTH(CONF_FM_BUF_DEPTH)
         )fm_buf(
@@ -138,10 +143,9 @@ generate
             .wea            (fm_wr_en[j]),
             .ena            (1),
             .enb            (1),
-            .doutb          (fm_dout[j]),
-            .ping_pong      (fm_ping_pong[j])
+            .doutb          (fm_dout[j])
         );
-        ping_pong_buffer #(
+        two_port_mem #(
             .BIT_LENGTH(6),
             .DEPTH(CONF_GUARD_BUF_DEPTH)
         )guard_buf(
@@ -153,8 +157,7 @@ generate
             .wea            (gd_wr_en[j]),
             .ena            (1),
             .enb            (1),
-            .doutb          (gd_dout[j]),
-            .ping_pong      (gd_ping_pong[j])
+            .doutb          (gd_dout[j])
         );
     end
 endgenerate

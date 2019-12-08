@@ -1,6 +1,6 @@
 /*======================================================
 Descripton:
-normal adder
+parameterized adder tree
 
 Create:  
 Yipeng   wangyipengv@outlook.com  20191126

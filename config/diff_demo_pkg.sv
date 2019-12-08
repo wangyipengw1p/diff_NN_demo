@@ -11,12 +11,13 @@ Notes:
 1. w_num <= 250
 =========================================================*/
 package diff_demo_pkg;
+// for peripheral design [need reconfirm]
 parameter CONF_INS_WIDTH        = 32;       // the same as ddr addr width
 parameter CONF_AXI_ADDR_WIDTH   = 32;       // reg width of DDR, should correspond with the settings in vivado ip
 parameter CONF_AXI_DATA_WIDTH   = 32;       // 
 parameter CONF_DDR_DATA_WIDTH   = 8;
-// TOP          3154k
 parameter CONF_DDR_ADDR_WIDTH   = 32;
+// Buffers          3154k
 parameter CONF_FM_BUF_DEPTH     = 18432;   // since the second layer is bottleneck, the fm buf drpth is (98*31*24/CONF_PE_COL) round up to the nearest 512|1152k
 parameter CONF_GUARD_BUF_DEPTH  = 3072;    // (98*31*24/CONF_PE_COL/PE_PROCESS_WINDOW) round up to the nearest 512                                        |144k       
 parameter CONF_WT_BUF_DEPTH     = 512;     // (3*24 + 24*36 + 36*48 + (48*64 + 64 *64) / 2) / CONF_PE_ROW / CONF_PE_COL       = 390.2                     |1600k|1.5625M
@@ -31,10 +32,11 @@ parameter PE_PROCESS_WINDOW = 6;
 
 // FM buf 570k (pingpong)
 // WT buf 1M +
-// PE matrix
+
+// PE matrix-------------------------
 parameter CONF_PE_ROW = 4;
 parameter CONF_PE_COL = 4;
-
+// ----------------------------------
 
 
 // PE
@@ -45,7 +47,10 @@ parameter FIFO_DEPTH = 4;               //3*6*PSUM_WIDTH*FIFO_DEPTH = 2.25k per 
 // fm_guard_gen                                     //per row, sum 528k
 parameter FM_GUARD_GEN_TMP_BUF_DEPTH = 32;          //18k * 2
 parameter FM_GUARD_GEN_PSUM_BUF_DEPTH = 512;        //96k * 2
+parameter FM_GUARD_GEN_REF_BUF_DEPTH = 512;         //!!!
+// first add 8 bit and bias, if diff then add 4 bit and do the diff
 
+// - types for ports ----------------------------------------------------------------------------------------------------------
 typedef enum logic[2:0] {  
     IDLE  = 3'd0, 
     ONE   = 3'd1, 

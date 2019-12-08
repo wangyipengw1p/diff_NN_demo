@@ -1,6 +1,6 @@
 /*======================================================
 Descripton:
-normal adder
+normal adder， without data truncate
 
 Create:  
 Yipeng   wangyipengv@outlook.com  20191126
@@ -10,7 +10,6 @@ Modify:
 Notes:
 1. 
 =========================================================*/
-import diff_demo_pkg::*;
 module adder#(
     parameter WIDTH = 32
 )(

@@ -22,6 +22,7 @@ module core_top_ctrl(
     output logic                                                                                core_finish,
     input  logic                                                                                core_fm_ping_pong_i,
     input  logic                                                                                core_bit_mode_i,
+    input  logic                                                                                core_is_diff_i,
     // for PE matrix                    
     output logic [CONF_PE_COL - 1 : 0]                                                          PE_col_ctrl_valid,
     input  logic [CONF_PE_COL - 1 : 0]                                                          PE_col_ctrl_ready,
@@ -34,8 +35,10 @@ module core_top_ctrl(
     output logic [7 : 0 ]                                                                       c_num,
     output logic [CONF_PE_COL - 1 : 0]                                                          bit_mode,             
     output logic [CONF_PE_COL - 1 : 0]                                                          kernel_mode,
+    output logic                                                                                is_diff,
+    output logic                                                                                is_first,
     output logic [CONF_PE_COL - 1 : 0]                                                          is_odd_row,
-    output logic [CONF_PE_COL - 1 : 0]                                                          end_of_row,//not used
+    output logic [CONF_PE_COL - 1 : 0]                                                          end_of_row,
     output logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   activation,
     input  logic [CONF_PE_COL - 1 : 0]                                                          activation_en,//?
     output logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   guard_map,   
@@ -56,7 +59,7 @@ module core_top_ctrl(
     input  logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    load_gd_wr_addr,
     input  logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   load_gd_din,
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en,         //rd_en for energy save
-    input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_ping_pong,      //not used
+    //input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_ping_pong,      //not used
     // for fm buf
     output logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       fm_wr_addr,
     output logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       fm_rd_addr,
@@ -64,14 +67,14 @@ module core_top_ctrl(
     input  logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   fm_dout,
     output logic [CONF_PE_COL - 1 : 0]                                                          fm_rd_en,          
     output logic [CONF_PE_COL - 1 : 0]                                                          fm_wr_en,          
-    output logic [CONF_PE_COL - 1 : 0]                                                          fm_ping_pong,
+    //output logic [CONF_PE_COL - 1 : 0]                                                          fm_ping_pong,
     // for guard buf    
     output logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    gd_rd_addr,
     output logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    gd_wr_addr,
     input  logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   gd_dout,
     output logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   gd_din,
-    output logic [CONF_PE_COL - 1 : 0]                                                          gd_rd_en,          
-    output logic [CONF_PE_COL - 1 : 0]                                                          gd_wr_en,          
+    output logic [CONF_PE_COL - 1 : 0]                                                          gd_rd_en,
+    output logic [CONF_PE_COL - 1 : 0]                                                          gd_wr_en,
     output logic [CONF_PE_COL - 1 : 0]                                                          gd_ping_pong,
     // for weight buf   
     output logic [$clog2(CONF_WT_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]  wt_rd_addr,
@@ -85,22 +88,22 @@ module core_top_ctrl(
 genvar i, j;
 // - ctrl protcol -----------------------------------------------------
 logic core_fm_ping_pong;
-logic core_bit_mode;
 logic one_layer_finish, finish_all;
+logic tick_tock;                    // for diff
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
         core_ready   <= 1;
         {
             core_finish,
             core_fm_ping_pong,
-            core_bit_mode
+            is_diff
         } <= '0;
     end else begin
         core_finish <= 0;
         if (core_valid  && core_ready )begin
             core_ready  <= 0;
             core_fm_ping_pong <= core_fm_ping_pong_i;
-            core_bit_mode <= core_bit_mode_i;
+            is_diff <= core_is_diff_i;
         end
         if (core_finish  && !core_ready )   core_ready  <= 1;
         // ctrl finish here
@@ -120,23 +123,29 @@ always_ff@(posedge clk or negedge rst_n)
             FINISH:             state <= IDLE;
         endcase
 // - layer and parameters -------------------------------------------------------------
-logic [2:0] layer_num; 
+logic [2:0] layer_num;
 logic [7:0] co_num;
 logic ping_pong_now;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) begin
     {
-        layer_num
+        layer_num,
+        tick_tock
     } <= '0;
     end else begin
-        if(core_valid  && core_ready) layer_num <= 3'd1;
-        else if (state == IDLE) layer_num <= '0;
-        else if(one_layer_finish) layer_num++;
+        if(core_valid  && core_ready) begin
+            layer_num <= 3'd1;
+            tick_tock <= is_diff ? 0 : 1;
+        end else if (state == IDLE) layer_num <= '0;
+        else if(one_layer_finish && tick_tock) layer_num++;
+
+        if(one_layer_finish && !tick_tock) tick_tock <= ~tick_tock;
     end
 // hard-coded network parameters, actually could be calculated, but for easy ...
 always_comb begin
     // bit_mode
-    bit_mode = core_bit_mode;
+    bit_mode = is_diff ? tick_tock : 0;
+    is_first = 0;
     // w h c
     // kernel mode
     case (layer_num)
@@ -146,7 +155,7 @@ always_comb begin
             c_num = 8'd3;
             co_num= 8'd24;
             kernel_mode = 1;
-            ping_pong_now = core_fm_ping_pong;
+            is_first = 1;
         end
         3'd2:begin
             w_num = 8'd98;
@@ -154,7 +163,6 @@ always_comb begin
             c_num = 8'd24;
             co_num= 8'd36;
             kernel_mode = 1;
-            ping_pong_now = ~core_fm_ping_pong;
         end
         3'd3: begin
             w_num = 8'd47;
@@ -162,7 +170,6 @@ always_comb begin
             c_num = 8'd36;
             co_num= 8'd48;
             kernel_mode = 1;
-            ping_pong_now = core_fm_ping_pong;
         end
         3'd4: begin
             w_num = 8'd22;
@@ -170,7 +177,6 @@ always_comb begin
             c_num = 8'd48;
             co_num= 8'd64;
             kernel_mode = 0;
-            ping_pong_now = ~core_fm_ping_pong;
         end
         3'd5:begin
             w_num = 8'd20;
@@ -178,7 +184,6 @@ always_comb begin
             c_num = 8'd64;
             co_num= 8'd64;
             kernel_mode = 0;
-            ping_pong_now = core_fm_ping_pong;
         end
         default:begin
             w_num = 8'd0;
@@ -186,15 +191,14 @@ always_comb begin
             c_num = 8'd0;
             co_num= 8'd0;
             kernel_mode = 1;
-            ping_pong_now = core_fm_ping_pong;
         end
     endcase
 end
-
+/*
 always_comb begin
     fm_ping_pong = core_ready ? load_fm_ping_pong : ping_pong_now;
     gd_ping_pong = core_ready ? load_gd_ping_pong :ping_pong_now;
-end
+end*/
 // - In PE matrix ctrl --------------------------------------------------
 
 logic [CONF_PE_COL - 1 : 0] col_finish_input_for_a_layer;
@@ -239,7 +243,8 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         else if (count_co == co_num - 1) col_finish_input_for_a_layer[j] <= 1;
         else if (input_one_layer_finish) col_finish_input_for_a_layer[j] <= 0;
     //addr magagement
-    always_comb PE_col_ctrl_valid = PE_col_ctrl_ready;              // save clk cycle, but ok?
+    always_comb PE_col_ctrl_valid[j] = PE_col_ctrl_ready[j];              // save clk cycle, but ok?
+    always_comb end_of_row[j] = count_w < 6 ? 1 : 0;
     always_ff@(posedge clk or negedge rst_n)
         if(!rst_n) begin
         {
@@ -327,24 +332,24 @@ endgenerate
 generate
 for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_write_back_din_en_mux
     for(i = CONF_PE_ROW - 1; i >= 0; i--) begin:mux_per_bank
-        if(gen_write_back_ctrl[i].now_write_back_port == j)
-            always_comb begin
-                fm_wr_addr[j]   = gen_write_back_ctrl[i].fm_addr;
-                gd_wr_addr[j]   = gen_write_back_ctrl[i].gd_addr;
-                fm_wr_en[j]     = fm_write_back_data_o_valid[i];
-                gd_wr_en[j]     =  guard_o_valid[i];
-                fm_din[j]       = fm_write_back_data[i];
-                gd_din[j]       = guard_o[i];
-            end 
-        else 
-            always_comb {
-                fm_wr_addr[j],
-                gd_wr_addr[j],
-                fm_wr_en[j]  ,
-                gd_wr_en[j]  ,
-                fm_din[j]    ,
-                gd_din[j]    
-            } = '0;
+        always_comb
+            if(gen_write_back_ctrl[i].now_write_back_port == j)
+                begin
+                    fm_wr_addr[j]   = gen_write_back_ctrl[i].fm_addr;
+                    gd_wr_addr[j]   = gen_write_back_ctrl[i].gd_addr;
+                    fm_wr_en[j]     = fm_write_back_data_o_valid[i];
+                    gd_wr_en[j]     =  guard_o_valid[i];
+                    fm_din[j]       = fm_write_back_data[i];
+                    gd_din[j]       = guard_o[i];
+                end 
+            else  {
+                    fm_wr_addr[j],
+                    gd_wr_addr[j],
+                    fm_wr_en[j]  ,
+                    gd_wr_en[j]  ,
+                    fm_din[j]    ,
+                    gd_din[j]    
+                } = '0;
     end
 end
 endgenerate
