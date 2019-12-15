@@ -37,19 +37,20 @@ module fm_guard_gen(
     input  logic                                psum_almost_valid,
     input  logic [3 * 6 * PSUM_WIDTH - 1 : 0 ]  psum_ans_i,
     //
-    input  logic [7:0][5:0]                     bias_i,
+    input  logic [5:0][7:0]                     bias_i,
     //
     output logic                                write_back_finish,
     output logic [7:0]                          write_back_data_o,   
-    output logic                                fm_buf_ready,           
+    //output logic                                fm_buf_ready,           
     output logic                                write_back_data_o_valid, 
     output logic [5:0]                          guard_o,       
-    output logic                                guard_buf_ready,         
+    //output logic                                guard_buf_ready,         
     output logic                                guard_o_valid           
 
 );
 // - declearation -------------------------------------------------------
 logic psum_valid;       // delayed psum_almost_valid
+always_ff@(posedge clk or negedge rst_n) if(!rst_n) psum_valid <= 0; else psum_valid <= psum_almost_valid;
 logic write_back_ready; //                                                                              !!!
 genvar i, j;
 // - tmp line buffer -----------------------------------------------------------------
@@ -57,11 +58,11 @@ logic [$clog2(FM_GUARD_GEN_TMP_BUF_DEPTH) - 1 : 0] buf_addr;
 //logic [$clog2(FM_GUARD_GEN_BUF_DEPTH) - 1 : 0] buf_rd_addr;
 logic [3*6*PSUM_WIDTH - 1 : 0] buf_data_in, buf_data_out_1, buf_data_out_2;
 logic buf_wr_en_1, buf_wr_en_2;
-logic [PSUM_WIDTH - 1 : 0][5:0] add_a, add_b, add_c, add_d, add_ans_1, add_ans_2;
+logic [5:0][PSUM_WIDTH - 1 : 0] add_a, add_b, add_c, add_d, add_ans_1, add_ans_2;
 
 two_port_mem #(
     .BIT_LENGTH(3*6*PSUM_WIDTH),
-    .DRPTH(FM_GUARD_GEN_TMP_BUF_DEPTH)
+    .DEPTH(FM_GUARD_GEN_TMP_BUF_DEPTH)
 ) tmp_buf_1 (
     .*,
     .addra      (buf_addr),
@@ -74,7 +75,7 @@ two_port_mem #(
 );
 two_port_mem #(
     .BIT_LENGTH(3*6*PSUM_WIDTH),
-    .DRPTH(FM_GUARD_GEN_TMP_BUF_DEPTH)
+    .DEPTH(FM_GUARD_GEN_TMP_BUF_DEPTH)
 ) tmp_buf_2 (
     .*,
     .addra      (buf_addr),
@@ -110,7 +111,7 @@ always_ff@(posedge clk or negedge rst_n)
         } <= '0;
     else if (psum_valid)begin
         if (buf_addr == (w_num - 1)) buf_addr <= 0;
-        else buf_addr++;
+        else buf_addr <= buf_addr + 1;
     end
 //  - en and din assignment -----------------------------------------------------------------------------
 always_comb begin
@@ -164,7 +165,7 @@ if(kernel_mode)
         end
         h_num - 3:begin
             add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
-            add_b = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] : buf_data_out_1[2*66*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+            add_b = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] : buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
             add_c = '0;
             add_d = add_ans_1;
         end
@@ -258,17 +259,17 @@ else begin       //3*3
 end
 // - psum buffer -----------------------------------------------------
 logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] psum_buf_wr_addr, psum_buf_rd_addr;
-logic [PSUM_WIDTH - 1 : 0][5:0] psum_buf_data_in, psum_buf_data_out;
-logic [PSUM_WIDTH - 1 : 0][5:0] psum_add_ans, psum_add_ans_for_4_bit;
+(*DONT_TOUCH = "true"*)logic [5:0][PSUM_WIDTH - 1 : 0] psum_buf_data_in, psum_buf_data_out;
+logic [5:0][PSUM_WIDTH - 1 : 0] psum_add_ans, psum_add_ans_for_4_bit;
 logic psum_buf_ping_pong, psum_buf_wr_en;
-logic [PSUM_WIDTH - 1 : 0][5:0] bias_to_add;
-logic [PSUM_WIDTH - 1 : 0][5:0] after_diff;
+logic [5:0][PSUM_WIDTH - 1 : 0] bias_to_add;
+logic [5:0][PSUM_WIDTH - 1 : 0] after_diff;
 logic psum_buf_wr_addr_dont_increase;
 always_comb psum_buf_data_in = bit_mode ? count_c  == 0  ?  after_diff : psum_add_ans_for_4_bit : psum_add_ans;
 always_comb psum_buf_wr_en = ~psum_buf_wr_addr_dont_increase;
 ping_pong_buffer #(
     .BIT_LENGTH(6*PSUM_WIDTH),
-    .DRPTH(FM_GUARD_GEN_PSUM_BUF_DEPTH)
+    .DEPTH(FM_GUARD_GEN_PSUM_BUF_DEPTH)
 ) psum_buf (
     .*,
     .addra      (psum_buf_wr_addr),
@@ -284,7 +285,7 @@ ping_pong_buffer #(
 generate 
     for( i = 5; i >=0; i--)begin:add_for_psum_buf
         logic [PSUM_WIDTH - 1 : 0] tmp_add_a;
-        always_comb bias_to_add[i] = {24'd0,bias_i};
+        always_comb bias_to_add[i] = {24'd0,bias_i[i]};  //
         always_comb tmp_add_a = count_c == 1 ? is_diff && bit_mode ?  after_diff[i] :bias_to_add[i] : add_ans_2[i];
         adder #(
             .WIDTH(PSUM_WIDTH)
@@ -314,7 +315,7 @@ always_ff@(posedge clk or negedge rst_n)
     else if (psum_buf_wr_addr_dont_increase); //do nothing
     else begin
         if (psum_buf_wr_addr == (w_num * h_num - 1)) psum_buf_wr_addr <= 0;                 //whether the synthesis tool will optimise this?
-        else psum_buf_wr_addr++;
+        else psum_buf_wr_addr <= psum_buf_wr_addr + 1;
         if(count_c == 0 && count_h == 0 && count_w < 6 && bit_mode) begin
             psum_buf_ping_pong <= ~psum_buf_ping_pong;  //++ ok?
         end
@@ -329,8 +330,9 @@ always_comb
     
 
 // - diff process -------------------------------------------------------------
-logic [PSUM_WIDTH - 1 : 0][5:0] after_sum_with_diff, after_sum_with_diff_and_relu;
-logic [PSUM_WIDTH - 1 : 0][5:0] ref_after_relu, minus_ref_after_relu;
+logic [5:0][PSUM_WIDTH - 1 : 0] after_sum_with_diff, after_sum_with_diff_and_relu;
+logic [5:0][PSUM_WIDTH - 1 : 0] ref_after_relu, minus_ref_after_relu;
+logic [5:0][7 : 0]  ref_buf_data_in,ref_buf_data_out;
 generate 
     for( i = 5; i >=0; i--)begin:add_for_diff_process
         adder #(
@@ -341,9 +343,10 @@ generate
             .ans(after_sum_with_diff[i])
         );
         //relu
-        always_comb after_sum_with_diff_and_relu[i] = after_sum_with_diff[i][PSUM_WIDTH-1] == 1 ?  '0 : after_sum_with_diff_and_relu[i];
-        always_comb ref_after_relu[i] = ref_after_relu[i][7]  ==  1 ?  '0 : {{PSUM_WIDTH-8{1'b0}}, ref_after_relu[i]};
+        always_comb after_sum_with_diff_and_relu[i] = after_sum_with_diff[i][PSUM_WIDTH-1] == 1 ?  '0 : after_sum_with_diff[i];
+        always_comb ref_after_relu[i] = ref_buf_data_out[i][7]  ==  1 ?  '0 : {{PSUM_WIDTH-8{1'b0}}, ref_buf_data_out[i]};
         always_comb minus_ref_after_relu[i] = ~ref_after_relu[i] + 1;
+        always_comb ref_buf_data_in[i] = after_sum_with_diff[i][7:0];
         adder #(
             .WIDTH(PSUM_WIDTH)
         ) minus_after_relu (
@@ -358,12 +361,11 @@ endgenerate
 // - ref buf ------------------------------------------------------------------
 // 8 bit for ref, maybe not desired
 logic [$clog2(FM_GUARD_GEN_REF_BUF_DEPTH) - 1 : 0] ref_buf_addr;
-logic [7 : 0][5:0] ref_buf_data_in, ref_buf_data_out;
 logic ref_buf_wr_en;
 logic is_first_d;
 two_port_mem #(
     .BIT_LENGTH(6*8),
-    .DRPTH(FM_GUARD_GEN_REF_BUF_DEPTH)
+    .DEPTH(FM_GUARD_GEN_REF_BUF_DEPTH)
 ) ref_buf (
     .*,
     .addra      (ref_buf_addr),
@@ -378,25 +380,25 @@ always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) {ref_buf_addr, is_first_d} <=  '0;
     else begin
         if(is_first && !is_first_d) ref_buf_addr <=  '0;
-        else if(count_c == 1 && bit_mode)ref_buf_addr++;
+        else if(count_c == 1 && bit_mode)ref_buf_addr <= ref_buf_addr + 1;
     end
 always_comb ref_buf_wr_en = count_c == 1 && bit_mode ?  1 : 0;
 // - relu_guard_write_back ----------------------------------------------------
 logic write_back_valid;                                       ///ready output
-relu_guard_write_back inst_relu_guard_write_back(
+write_back inst_relu_guard_write_back(
     .ctrl_valid          (write_back_valid),       
     .ctrl_ready          (write_back_ready),                                                    // no connection now 
     .ctrl_finish         (write_back_finish),    
     .stop_addr_i         (psum_buf_wr_addr),
-    .bit_mode_i          (bit_mode),
+    //.bit_mode_i          (bit_mode),
     .is_diff_i           (is_diff),
     .data_i              (psum_buf_data_out),   
     .addr_o              (psum_buf_rd_addr),   
     .data_o              (write_back_data_o), 
-    .fm_buf_ready        (fm_buf_ready),           
+    //.fm_buf_ready        (fm_buf_ready),           
     .data_o_valid        (write_back_data_o_valid),           
     .guard_o             (guard_o),       
-    .guard_buf_ready     (guard_buf_ready),               
+    //.guard_buf_ready     (guard_buf_ready),               
     .guard_o_valid       (guard_o_valid)           
 );
 always_ff@(posedge clk or negedge rst_n)

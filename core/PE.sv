@@ -19,7 +19,7 @@ module PE (
     //
     input  PE_state_t                               state,
     input  PE_weight_mode_t                         weight_mode,
-    output logic                                    finish,
+    input logic                                     finish,
     input  logic                                    end_of_row,
     input  logic [25 * 8 - 1 : 0]                   weight_i,
     //
@@ -34,7 +34,7 @@ module PE (
 );
 genvar i, j;
 // - general ----------------------------------------------
-logic [PSUM_WIDTH - 1 : 0][2 : 0][7 : 0] pre_psum;
+logic [7 : 0][2 : 0][PSUM_WIDTH - 1 : 0] pre_psum;
 
 // special for 5*5 kernel
 logic tick_tock;            // even or odd row
@@ -53,11 +53,11 @@ always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) weight <= 0;
     else weight <= weight_i;
 // - 9 muls--------------------------------------------------------
-logic [7 : 0][8 : 0] mul_b;  //for easy coding
-logic [15: 0][8 : 0] mul_ans;//for easy coding
-logic [PSUM_WIDTH-1: 0][8 : 0] mul_ans_conv;//for bit length conversion
+logic [8 : 0][7: 0] mul_b;  //for easy coding
+logic [8 : 0][PSUM_WIDTH-1: 0] mul_ans;//for easy coding
+logic [8 : 0][PSUM_WIDTH-1: 0] mul_ans_conv;//for bit length conversion
 generate
-    for(genvar i = 8; i >=0; i--) begin:mul
+    for(i = 8; i >=0; i--) begin:mul
         multiplier inst_mul(
             .mode(bit_mode),
             .a(activation_i),
@@ -69,6 +69,7 @@ generate
 endgenerate
 //mul assignment: considered balance and energy save
 always_comb begin
+    mul_b = '0;
     case(weight_mode)
         E_MODE,A_MODE:
             mul_b = weight.A_9;
@@ -89,9 +90,9 @@ always_comb begin
 end
 
 // - 6 adders -------------------------------------------------------
-logic [PSUM_WIDTH - 1 : 0][5 : 0] add_a;  
-logic [PSUM_WIDTH - 1 : 0][5 : 0] add_b;  
-logic [PSUM_WIDTH - 1 : 0][5 : 0] add_ans;  
+logic [5 : 0][PSUM_WIDTH - 1 : 0] add_a;  
+logic [5 : 0][PSUM_WIDTH - 1 : 0] add_b;  
+logic [5 : 0][PSUM_WIDTH - 1 : 0] add_ans;  
 generate
     for(i = 5; i >=0; i--) begin:inst_add
         adder#(
@@ -105,7 +106,8 @@ generate
 endgenerate
 //add assignment: to be optimise for energy save
 always_comb begin
-    
+    add_a = '0;
+    add_b = '0;
     case(weight_mode)
         E_MODE:begin
             add_a = {pre_psum[8-state], pre_psum[7-state]};
@@ -178,12 +180,12 @@ always_ff@(posedge clk or negedge rst_n)
         endcase
     end
 // - fifo ----------------------------------------------------------
-logic [PSUM_WIDTH - 1 : 0][5 : 0][2 : 0] fifo_din;
+logic [2 : 0][5 : 0][PSUM_WIDTH - 1 : 0] fifo_din;
 // Trans                                                                                   ok?
 generate 
     for(i = 5; i >= 0; i --) begin: trans_i
         for(j = 2; j >= 0; j --) begin:trans_j
-            always_comb fifo_din[j][i] = pre_psum[i][j];
+            assign fifo_din[j][i] = pre_psum[i][j];             //??
         end
     end
 endgenerate

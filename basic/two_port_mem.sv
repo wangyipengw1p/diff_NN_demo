@@ -14,7 +14,8 @@ TODO:
 =========================================================*/
 module two_port_mem#(
     parameter BIT_LENGTH = 64,
-    parameter DEPTH = 16
+    parameter DEPTH = 16,
+    parameter MODE = "block"
 ) (
     input  logic                             clk,
     input  logic [$clog2(DEPTH) - 1 : 0 ]    addra,
@@ -26,7 +27,7 @@ module two_port_mem#(
     output logic [BIT_LENGTH       - 1 : 0 ] doutb                      
 );
 
-    reg [BIT_LENGTH - 1 : 0] BRAM [ (1 << $clog2(DEPTH)) - 1 : 0 ];
+(*ram_style = MODE*)reg [BIT_LENGTH - 1 : 0] BRAM [ (1 << $clog2(DEPTH)) - 1 : 0 ];
 
   always @(posedge clk)
     if (ena)

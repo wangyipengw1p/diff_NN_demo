@@ -57,30 +57,29 @@ module demo_top_ctrl(
     output  logic                                                                                core_bit_mode_i,
     output  logic                                                                                core_fm_ping_pong_i,
     //
-    output  logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       load_fm_wr_addr,
-    output  logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   load_fm_din,
+    output  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       load_fm_wr_addr,
+    output  logic [CONF_PE_COL - 1 : 0][7 : 0]                                                   load_fm_din,
     output  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en,         
     output  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_ping_pong,
-    output  logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    load_gd_wr_addr,
-    output  logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   load_gd_din,
+    output  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    load_gd_wr_addr,
+    output  logic [CONF_PE_COL - 1 : 0][5 : 0]                                                   load_gd_din,
     output  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en,         
     output  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_ping_pong,
     //
-    output  logic [$clog2(CONF_WT_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]  load_wt_wr_addr,
-    output  logic [5 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                              load_wt_din,
-    output  logic [CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                                     load_wt_wr_en,         
-    output  logic [$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0][CONF_PE_ROW - 1 : 0]                     load_bias_wr_addr,
-    output  logic [5 : 0][CONF_PE_ROW - 1 : 0]                                                   load_bias_din,
+    output  logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][$clog2(CONF_WT_BUF_DEPTH) - 1 : 0]  load_wt_wr_addr,
+    output  logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][5 : 0]                              load_wt_din,
+    output  logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                     load_wt_wr_en,         
+    output  logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                     load_bias_wr_addr,
+    output  logic [CONF_PE_ROW - 1 : 0][5 : 0]                                                   load_bias_din,
     output  logic [CONF_PE_ROW - 1 : 0]                                                          load_bias_wr_en, 
     // IRQ
     input									                                                     IRQ_ACK,
     output	logic								                                                 IRQ_REQ
 );
 //  - instruction and top state machine --------------------------------------
-logic [31 : 0][1 : 0] inst_addr;
+logic [1 : 0][31 : 0] inst_addr;
 logic inst_full, inst_empty;
 logic inst_rd_en;
-enum logic[2:0] {IDLE, }
 fifo_sync #(
     .DATA_WIDE(64),
     .FIFO_DEPT(FIFO_DEPTH)
@@ -93,9 +92,18 @@ fifo_sync #(
     .full(fifo_full_o),
     .empty(fifo_empty_o)
 );
+
+/*-------------------TODO------------------------
+    fm gd load
+    wt bias load
+    core valid
+    save
+    irq
+-------------------------------------------------*/
+
 // - IRQ -----------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) IRQ_REQ <= '0;
     else if(IRQ_ACK) IRQ_REQ <= '0;
-    else if(irq_tmp && save_state == STATE_FINISH) IRQ_REQ <= '1;
+    else if(1/*to be filled*/) IRQ_REQ <= '1;
 endmodule

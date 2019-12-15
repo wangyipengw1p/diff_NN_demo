@@ -18,8 +18,8 @@ parameter CONF_AXI_DATA_WIDTH   = 32;       //
 parameter CONF_DDR_DATA_WIDTH   = 8;
 parameter CONF_DDR_ADDR_WIDTH   = 32;
 // Buffers          3154k
-parameter CONF_FM_BUF_DEPTH     = 18432;   // since the second layer is bottleneck, the fm buf drpth is (98*31*24/CONF_PE_COL) round up to the nearest 512|1152k
-parameter CONF_GUARD_BUF_DEPTH  = 3072;    // (98*31*24/CONF_PE_COL/PE_PROCESS_WINDOW) round up to the nearest 512                                        |144k       
+parameter CONF_FM_BUF_DEPTH     = 2048;//18432;   // since the second layer is bottleneck, the fm buf drpth is (98*31*24/CONF_PE_COL) round up to the nearest 512|1152k
+parameter CONF_GUARD_BUF_DEPTH  = 256;//3072;    // (98*31*24/CONF_PE_COL/PE_PROCESS_WINDOW) round up to the nearest 512                                        |144k       
 parameter CONF_WT_BUF_DEPTH     = 512;     // (3*24 + 24*36 + 36*48 + (48*64 + 64 *64) / 2) / CONF_PE_ROW / CONF_PE_COL       = 390.2                     |1600k|1.5625M
 parameter CONF_BIAS_BUF_DEPTH   = 64;      // (24 + 36 + 48 + 64 + 64) / CONF_PE_ROW = 2k                                                                  |12k
 // - fixed ---------------------------------
@@ -47,7 +47,7 @@ parameter FIFO_DEPTH = 4;               //3*6*PSUM_WIDTH*FIFO_DEPTH = 2.25k per 
 // fm_guard_gen                                     //per row, sum 528k
 parameter FM_GUARD_GEN_TMP_BUF_DEPTH = 32;          //18k * 2
 parameter FM_GUARD_GEN_PSUM_BUF_DEPTH = 512;        //96k * 2
-parameter FM_GUARD_GEN_REF_BUF_DEPTH = 512;         //!!!
+parameter FM_GUARD_GEN_REF_BUF_DEPTH = 6144;         //!!!
 // first add 8 bit and bias, if diff then add 4 bit and do the diff
 
 // - types for ports ----------------------------------------------------------------------------------------------------------
@@ -64,9 +64,9 @@ typedef enum logic[2:0] {
 typedef enum logic[2:0]{ A_MODE , B_MODE, C_MODE, D_MODE, E_MODE } PE_weight_mode_t; //E_mode: 3*3 others: 5*5
 
 typedef struct packed {
-    logic [7 : 0][8 : 0] A_9;
-    logic [7 : 0][5 : 0] B_6;
-    logic [7 : 0][5 : 0] C_6;
-    logic [7 : 0][3 : 0] D_4;
+    logic [8 : 0][7 : 0] A_9;
+    logic [5 : 0][7 : 0] B_6;
+    logic [5 : 0][7 : 0] C_6;
+    logic [3 : 0][7 : 0] D_4;
 } PE_weight_t;
-endpackage;
+endpackage

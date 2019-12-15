@@ -20,8 +20,8 @@ module core_top_ctrl(
     output logic                                                                                core_ready,
     input  logic                                                                                core_valid,
     output logic                                                                                core_finish,
-    input  logic                                                                                core_fm_ping_pong_i,
-    input  logic                                                                                core_bit_mode_i,
+    //input  logic                                                                                core_fm_ping_pong_i,
+    //input  logic                                                                                core_bit_mode_i,
     input  logic                                                                                core_is_diff_i,
     // for PE matrix                    
     output logic [CONF_PE_COL - 1 : 0]                                                          PE_col_ctrl_valid,
@@ -39,55 +39,55 @@ module core_top_ctrl(
     output logic                                                                                is_first,
     output logic [CONF_PE_COL - 1 : 0]                                                          is_odd_row,
     output logic [CONF_PE_COL - 1 : 0]                                                          end_of_row,
-    output logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   activation,
+    output logic [CONF_PE_COL - 1 : 0][7 : 0]                                                   activation,
     input  logic [CONF_PE_COL - 1 : 0]                                                          activation_en,//?
-    output logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   guard_map,   
-    output logic [25 * 8 - 1 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                     weight,
-    output logic [7 : 0][5 : 0][CONF_PE_ROW - 1 : 0]                                            bias,
-    input  logic        [CONF_PE_ROW - 1 : 0]                                                   write_back_finish,
-    input  logic [7 : 0][CONF_PE_ROW - 1 : 0]                                                   fm_write_back_data,      
-    output logic        [CONF_PE_ROW - 1 : 0]                                                   fm_buf_ready,              
-    input  logic        [CONF_PE_ROW - 1 : 0]                                                   fm_write_back_data_o_valid,
-    input  logic [5 : 0][CONF_PE_ROW - 1 : 0]                                                   guard_o,                
-    output logic        [CONF_PE_ROW - 1 : 0]                                                   guard_buf_ready,        
-    input  logic        [CONF_PE_ROW - 1 : 0]                                                   guard_o_valid,
+    output logic [CONF_PE_COL - 1 : 0][5 : 0]                                                   guard_map,   
+    output logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][25 * 8 - 1 : 0]                     weight,
+    output logic [CONF_PE_ROW - 1 : 0][5 : 0][7 : 0]                                            bias,
+    input  logic [CONF_PE_ROW - 1 : 0]                                                          write_back_finish,
+    input  logic [CONF_PE_ROW - 1 : 0][7 : 0]                                                   fm_write_back_data,      
+    //output logic [CONF_PE_ROW - 1 : 0]                                                          fm_buf_ready,              
+    input  logic [CONF_PE_ROW - 1 : 0]                                                          fm_write_back_data_o_valid,
+    input  logic [CONF_PE_ROW - 1 : 0][5 : 0]                                                   guard_o,                
+    //output logic [CONF_PE_ROW - 1 : 0]                                                          guard_buf_ready,        
+    input  logic [CONF_PE_ROW - 1 : 0]                                                          guard_o_valid,
     // load from outside core
-    input  logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       load_fm_wr_addr,
-    input  logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   load_fm_din,
+    input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       load_fm_wr_addr,
+    input  logic [CONF_PE_COL - 1 : 0][7 : 0]                                                   load_fm_din,
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en,         //rd_en for energy save
-    input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_ping_pong,
-    input  logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    load_gd_wr_addr,
-    input  logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   load_gd_din,
+    //input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_ping_pong,
+    input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    load_gd_wr_addr,
+    input  logic [CONF_PE_COL - 1 : 0][5 : 0]                                                   load_gd_din,
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en,         //rd_en for energy save
     //input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_ping_pong,      //not used
     // for fm buf
-    output logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       fm_wr_addr,
-    output logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       fm_rd_addr,
-    output logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   fm_din,
-    input  logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   fm_dout,
-    output logic [CONF_PE_COL - 1 : 0]                                                          fm_rd_en,          
+    output logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       fm_wr_addr,
+    output logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       fm_rd_addr,
+    output logic [CONF_PE_COL - 1 : 0][71 : 0]                                                  fm_din,
+    input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                  fm_dout,
+    //output logic [CONF_PE_COL - 1 : 0]                                                          fm_rd_en,          
     output logic [CONF_PE_COL - 1 : 0]                                                          fm_wr_en,          
     //output logic [CONF_PE_COL - 1 : 0]                                                          fm_ping_pong,
     // for guard buf    
-    output logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    gd_rd_addr,
-    output logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    gd_wr_addr,
-    input  logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   gd_dout,
-    output logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   gd_din,
-    output logic [CONF_PE_COL - 1 : 0]                                                          gd_rd_en,
+    output logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    gd_rd_addr,
+    output logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    gd_wr_addr,
+    input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   gd_dout,
+    output logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   gd_din,
+    //output logic [CONF_PE_COL - 1 : 0]                                                          gd_rd_en,
     output logic [CONF_PE_COL - 1 : 0]                                                          gd_wr_en,
-    output logic [CONF_PE_COL - 1 : 0]                                                          gd_ping_pong,
+    //output logic [CONF_PE_COL - 1 : 0]                                                          gd_ping_pong,
     // for weight buf   
-    output logic [$clog2(CONF_WT_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]  wt_rd_addr,
-    input  logic [5 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                              wt_dout,
-    output logic [CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                                     wt_rd_en,          
+    output logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][$clog2(CONF_WT_BUF_DEPTH) - 1 : 0]  wt_rd_addr,
+    input  logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][25*8 - 1 : 0]                       wt_dout,
+    //output logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                     wt_rd_en,          
     // for bias buf 
-    output logic [$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0][CONF_PE_ROW - 1 : 0]                     bias_rd_addr,
-    input  logic [5 : 0][CONF_PE_ROW - 1 : 0]                                                   bias_dout,
-    output logic [CONF_PE_ROW - 1 : 0]                                                          bias_rd_en          
+    output logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                     bias_rd_addr,
+    input  logic [CONF_PE_ROW - 1 : 0][5 : 0][7 : 0]                                            bias_dout
+    //output logic [CONF_PE_ROW - 1 : 0]                                                          bias_rd_en          
 );
 genvar i, j;
 // - ctrl protcol -----------------------------------------------------
-logic core_fm_ping_pong;
+//logic core_fm_ping_pong;
 logic one_layer_finish, finish_all;
 logic tick_tock;                    // for diff
 always_ff@(posedge clk or negedge rst_n)
@@ -95,14 +95,14 @@ always_ff@(posedge clk or negedge rst_n)
         core_ready   <= 1;
         {
             core_finish,
-            core_fm_ping_pong,
+            //core_fm_ping_pong,
             is_diff
         } <= '0;
     end else begin
         core_finish <= 0;
         if (core_valid  && core_ready )begin
             core_ready  <= 0;
-            core_fm_ping_pong <= core_fm_ping_pong_i;
+            //core_fm_ping_pong <= core_fm_ping_pong_i;
             is_diff <= core_is_diff_i;
         end
         if (core_finish  && !core_ready )   core_ready  <= 1;
@@ -125,7 +125,10 @@ always_ff@(posedge clk or negedge rst_n)
 // - layer and parameters -------------------------------------------------------------
 logic [2:0] layer_num;
 logic [7:0] co_num;
-logic ping_pong_now;
+//logic ping_pong_now;
+
+always_comb finish_all = one_layer_finish && layer_num == 5;
+
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) begin
     {
@@ -137,7 +140,7 @@ always_ff@(posedge clk or negedge rst_n)
             layer_num <= 3'd1;
             tick_tock <= is_diff ? 0 : 1;
         end else if (state == IDLE) layer_num <= '0;
-        else if(one_layer_finish && tick_tock) layer_num++;
+        else if(one_layer_finish && tick_tock) layer_num <= layer_num + 1;
 
         if(one_layer_finish && !tick_tock) tick_tock <= ~tick_tock;
     end
@@ -209,6 +212,23 @@ generate
 for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
     //counters
     logic [7:0] count_w, count_h, count_co, count_ci;
+    logic [3:0] cnt_fm, cnt_gd;
+    //special counter for input
+    always_ff@(posedge clk or negedge rst_n)
+    if(!rst_n) {
+        cnt_fm,         // from 1 to 9
+        cnt_gd          // from 1 to 12
+    } <= '0;
+    else begin
+        if(activation_en[j]) 
+            if(cnt_fm == 8) cnt_fm <= 0;
+            else cnt_fm <= cnt_fm + 1;
+        
+        if(PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j])
+            if(cnt_gd == 11) cnt_gd <= 0;
+            else cnt_gd <= cnt_gd + 1;
+    end
+    // counter for data managment
     always_ff@(posedge clk or negedge rst_n)
         if(!rst_n) begin
         {
@@ -227,16 +247,17 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
                     count_h <=  h_num;
                     if (count_ci + CONF_PE_COL > c_num)begin
                         count_ci <= count_ci + CONF_PE_COL - c_num;
-                        count_co ++; 
+                        count_co <= count_co + 1; 
                     end else count_ci <= count_ci + CONF_PE_COL;
 
                 end else if (count_w == 1)begin
                     count_w <= w_num;
-                    count_h --;
+                    count_h <= count_h - 1;
                     is_odd_row[j] <= ~is_odd_row[j];
-                end else count_w --;
+                end else count_w <= count_w - 1;
             end
         end
+    // finish signal 
     always_comb col_finish_input_for_a_layer = count_co == co_num - 1;          //?
     always_ff@(posedge clk or negedge rst_n)
         if(!rst_n)  col_finish_input_for_a_layer[j] <= 0;
@@ -252,32 +273,53 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
             gd_rd_addr[j]
         } <= '0;
         end else begin
-            if(PE_col_ctrl_valid && PE_col_ctrl_ready) gd_rd_addr[j]++;
+            if(PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && cnt_gd == 1) gd_rd_addr[j] <= gd_rd_addr[j] + 1;   //1 here?
             if(state == PROCESS && activation_en[j]) begin
                 if(count_h == 1 && count_w == 1)begin
                     fm_rd_addr[j] <= '0;
                     gd_rd_addr[j] <= '0;
-                end else fm_rd_addr[j] ++;                          //[think]!!
+                end else if(cnt_fm == 1) fm_rd_addr[j] <= fm_rd_addr[j] + 1;                          //[think]!!
             end
         end
+    // input data management (shift reg for fm and gd)
+    logic   [71:0] shift_fm, shift_gd;
+    always_ff@(posedge clk or negedge rst_n)
+        if(!rst_n){
+            shift_fm,
+            shift_gd
+        } <= '0;
+        else begin
+            if (cnt_fm == 0) shift_fm <= fm_dout[j];
+            else if(state == PROCESS && activation_en[j]) shift_fm <= {shift_fm[63:0], 8'd0};
+            if (cnt_gd == 0) shift_gd  <= gd_dout[j];
+            else if(PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j]) shift_gd <= {shift_gd[65], 6'd0};
+        end
+    always_comb activation[j] =  shift_fm[71:64];
+    always_comb guard_map[j] = shift_gd[71:66];
+
 end
 endgenerate
 // - out PE matrix, fm and gd write signals, finish logic-------------------------------------------------
-logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                ctrl_fm_wr_addr;
-logic [7 : 0][CONF_PE_COL - 1 : 0]                                            ctrl_fm_din;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                ctrl_fm_wr_addr;
+logic [CONF_PE_COL - 1 : 0][7 : 0]                                            ctrl_fm_din;
+logic [CONF_PE_COL - 1 : 0][71 : 0]                                           ctrl_fm_din_f;
 logic [CONF_PE_COL - 1 : 0]                                                   ctrl_fm_wr_en;      
-logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]             ctrl_gd_wr_addr;
-logic [5 : 0][CONF_PE_COL - 1 : 0]                                            ctrl_gd_din;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             ctrl_gd_wr_addr;
+logic [CONF_PE_COL - 1 : 0][5 : 0]                                            ctrl_gd_din;
+logic [CONF_PE_COL - 1 : 0][71 : 0]                                           ctrl_gd_din_f;
 logic [CONF_PE_COL - 1 : 0]                                                   ctrl_gd_wr_en;      
 logic [CONF_PE_ROW - 1 : 0]                                                   wr_back_finish; //all row finish, then one layer finish
+logic [CONF_PE_ROW - 1 : 0][7:0]                                              now_wb_port;
+logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_addr;
+logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_addr;
 always_comb     one_layer_finish = &wr_back_finish;
 always_comb 
     if(core_ready) begin        //not run
         fm_wr_addr  = ctrl_fm_wr_addr;
-        fm_din      = ctrl_fm_din;
+        fm_din      = ctrl_fm_din_f;
         fm_wr_en    = ctrl_fm_wr_en;
         gd_wr_addr  = ctrl_gd_wr_addr;
-        gd_din      = ctrl_gd_din;
+        gd_din      = ctrl_gd_din_f;
         gd_wr_en    = ctrl_gd_wr_en;
     end else begin
         fm_wr_addr  = load_fm_wr_addr;
@@ -290,23 +332,21 @@ always_comb
 generate
 for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
     logic [7:0] count_co;
-    logic [7:0] now_write_back_port;
-    logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0] fm_addr;
-    logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0] gd_addr;
+    
     // count and write port
     always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) {
         count_co,
-        now_write_back_port,
+        now_wb_port[i],
         wr_back_finish[i]
     } <= '0;
     else begin
         if(state == START) begin
             count_co <= i;
-            now_write_back_port <= CONF_PE_ROW - i - 1;
+            now_wb_port[i] <= CONF_PE_ROW - i - 1;
         end else if (write_back_finish) begin
             count_co -= CONF_PE_ROW;
-            now_write_back_port += CONF_PE_ROW;
+            now_wb_port[i] += CONF_PE_ROW;
         end
         if(write_back_finish) wr_back_finish[i] <= 1;
         if(one_layer_finish) wr_back_finish[i] <= 0;
@@ -315,42 +355,77 @@ for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
     always_ff@(posedge clk or negedge rst_n)
         if(!rst_n) begin
         {
-            fm_addr,
-            gd_addr
+            fm_addr[i],
+            gd_addr[i]
         } <= '0;
         end else begin
-            if(fm_write_back_data_o_valid) fm_addr++;
-            if(guard_o_valid) gd_addr++;
+            if(fm_write_back_data_o_valid) fm_addr[i] <= fm_addr[i] + 1;
+            if(guard_o_valid) gd_addr[i] <= gd_addr[i] + 1;
             if(write_back_finish)begin
-                fm_addr <= '0;
-                gd_addr <= '0;
+                fm_addr[i] <= '0;
+                gd_addr[i] <= '0;
             end
         end
 end
 // MUX, but ok?
 endgenerate
+
 generate
 for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_write_back_din_en_mux
-    for(i = CONF_PE_ROW - 1; i >= 0; i--) begin:mux_per_bank
-        always_comb
-            if(gen_write_back_ctrl[i].now_write_back_port == j)
+    always_comb begin
+        {
+            ctrl_fm_wr_addr[j],
+            ctrl_gd_wr_addr[j],
+            ctrl_fm_wr_en[j]  ,
+            ctrl_gd_wr_en[j]  ,
+            ctrl_fm_din[j]    ,
+            ctrl_gd_din[j]    
+        } = '0;
+        for(integer i = CONF_PE_ROW - 1; i >= 0; i--) begin
+            if(now_wb_port[i] == j)
                 begin
-                    fm_wr_addr[j]   = gen_write_back_ctrl[i].fm_addr;
-                    gd_wr_addr[j]   = gen_write_back_ctrl[i].gd_addr;
-                    fm_wr_en[j]     = fm_write_back_data_o_valid[i];
-                    gd_wr_en[j]     =  guard_o_valid[i];
-                    fm_din[j]       = fm_write_back_data[i];
-                    gd_din[j]       = guard_o[i];
+                    ctrl_fm_wr_addr[j]   = fm_addr[i];
+                    ctrl_gd_wr_addr[j]   = gd_addr[i];
+                    ctrl_fm_wr_en[j]     = fm_write_back_data_o_valid[i];
+                    ctrl_gd_wr_en[j]     = guard_o_valid[i];
+                    ctrl_fm_din[j]       = fm_write_back_data[i];
+                    ctrl_gd_din[j]       = guard_o[i];
                 end 
-            else  {
-                    fm_wr_addr[j],
-                    gd_wr_addr[j],
-                    fm_wr_en[j]  ,
-                    gd_wr_en[j]  ,
-                    fm_din[j]    ,
-                    gd_din[j]    
-                } = '0;
+        end
     end
 end
 endgenerate
+// - wt/bias rd addr --------------------------------------------
+logic is_first_d;
+always_ff@(posedge clk or negedge rst_n)
+    if(!rst_n) 
+    {
+        bias_rd_addr,
+        is_first_d
+    } <= '0;
+    else begin
+        is_first_d <= is_first;
+        if(is_first && !is_first_d) begin
+            bias_rd_addr <= '0;
+            
+        end else begin
+            if(one_layer_finish) bias_rd_addr <= bias_rd_addr + 1;
+        end
+    end
+generate
+for(i = CONF_PE_ROW - 1; i >= 0; i--) begin:gen_wt_addr
+    for(j = CONF_PE_COL - 1; j >= 0; j--)begin:gen_wt_addr_col
+        always_ff@(posedge clk or negedge rst_n)
+        if(!rst_n) wt_rd_addr[i][j] <= '0;
+        else if(is_first && !is_first_d) wt_rd_addr[i][j] <='0;
+        else if(fm_gd_in[j].count_h == 1 && fm_gd_in[j].count_w == 1) wt_rd_addr[i][j] <= wt_rd_addr[i][j] + 1;
+    end
+end
+endgenerate
+// - out --------------------------------------------------------
+//always_comb activation = fm_dout;
+always_comb weight = wt_dout;
+//always_comb guard_map = gd_dout;
+always_comb bias = bias_dout;
+
 endmodule

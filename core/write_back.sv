@@ -23,9 +23,9 @@ module write_back(
     input  logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0]  stop_addr_i,
     input  logic                                                is_diff_i,
     //                      
-    input  logic [PSUM_WIDTH - 1 : 0][5:0]                      data_i,
+    input  logic [5:0][PSUM_WIDTH - 1 : 0]                      data_i,
     output logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0]  addr_o,
-    output logic                                                rd_en,
+    //output logic                                                rd_en,
     //
     output logic [7 : 0]                                        data_o,
     //input  logic                                                fm_buf_ready,           //un-necessary
@@ -47,8 +47,8 @@ typedef enum logic[2:0] {
 } state_t;
 
 state_t state, next_state;
-logic [5:0] guard_map_8, guard_map_4, guard_map_4_8, guard_map;
-logic [7:0][5:0] data_reg;
+logic [5:0] guard_map_8, guard_map_4, guard_map_4_8;
+logic [5:0][7:0] data_reg;
 logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] stop_addr;
 logic almost_finish;
 logic is_diff;
@@ -93,66 +93,68 @@ always_ff@(posedge clk or negedge rst_n)
     else 
         state <= next_state;
 
-always_comb
+always_comb begin
+    next_state = state;
     case(state)
         IDLE:   next_state =  ctrl_valid && ctrl_ready ? START : IDLE;
         START:
-            if (bit_mode) next_state <= ONE;
+            if (bit_mode) next_state = ONE;
             else
-                case(guard_map)                                                         //---------------might be critical path
-                    6'b1?????: next_state <= ONE;
-                    6'b01????: next_state <= TWO;
-                    6'b001???: next_state <= THREE;
-                    6'b0001??: next_state <= FOUR;
-                    6'b00001?: next_state <= FIVE;
-                    6'b000001: next_state <= SIX;
-                    default:   next_state <= almost_finish ? IDLE : START;
+                case(guard_o)                                                         //---------------might be critical path
+                    6'b1?????: next_state = ONE;
+                    6'b01????: next_state = TWO;
+                    6'b001???: next_state = THREE;
+                    6'b0001??: next_state = FOUR;
+                    6'b00001?: next_state = FIVE;
+                    6'b000001: next_state = SIX;
+                    default:   next_state = almost_finish ? IDLE : START;
                 endcase
         ONE:
-            if (bit_mode) next_state <= TWO;
+            if (bit_mode) next_state = TWO;
             else
                 case(guard_o[4:0])
-                    5'b1????: next_state <= TWO;
-                    5'b01???: next_state <= THREE;
-                    5'b001??: next_state <= FOUR;
-                    5'b0001?: next_state <= FIVE;
-                    5'b00001: next_state <= SIX;
-                    default:  next_state <= almost_finish ? IDLE : START;
+                    5'b1????: next_state = TWO;
+                    5'b01???: next_state = THREE;
+                    5'b001??: next_state = FOUR;
+                    5'b0001?: next_state = FIVE;
+                    5'b00001: next_state = SIX;
+                    default:  next_state = almost_finish ? IDLE : START;
                 endcase
         TWO:
-            if (bit_mode) next_state <= THREE;
+            if (bit_mode) next_state = THREE;
             else
                 case(guard_o[3:0])
-                    4'b1???:  next_state <= THREE;
-                    4'b01??:  next_state <= FOUR;
-                    4'b001?:  next_state <= FIVE;
-                    4'b0001:  next_state <= SIX;
-                    default:  next_state <= almost_finish ? IDLE : START;
+                    4'b1???:  next_state = THREE;
+                    4'b01??:  next_state = FOUR;
+                    4'b001?:  next_state = FIVE;
+                    4'b0001:  next_state = SIX;
+                    default:  next_state = almost_finish ? IDLE : START;
                 endcase
         THREE:
-            if (bit_mode) next_state <= FOUR;
+            if (bit_mode) next_state = FOUR;
                 else
                 case(guard_o[2:0])
-                    3'b1??:   next_state <= FOUR;
-                    3'b01?:   next_state <= FIVE;
-                    3'b001:   next_state <= SIX;
-                    default:  next_state <= almost_finish ? IDLE : START;
+                    3'b1??:   next_state = FOUR;
+                    3'b01?:   next_state = FIVE;
+                    3'b001:   next_state = SIX;
+                    default:  next_state = almost_finish ? IDLE : START;
                 endcase
         FOUR:
-            if (bit_mode) next_state <= FIVE;
+            if (bit_mode) next_state = FIVE;
                 else
                 case(guard_o[1:0])
-                    2'b1?:   next_state <= FIVE;
-                    2'b01:   next_state <= SIX;
-                    default:  next_state <= almost_finish ? IDLE : START;
+                    2'b1?:   next_state = FIVE;
+                    2'b01:   next_state = SIX;
+                    default:  next_state = almost_finish ? IDLE : START;
                 endcase
         FIVE:
-            if (bit_mode) next_state <= SIX;
-            else if(guard_o[0] == 1) next_state <= SIX;
-            else next_state <= almost_finish ? IDLE : START;
+            if (bit_mode) next_state = SIX;
+            else if(guard_o[0] == 1) next_state = SIX;
+            else next_state = almost_finish ? IDLE : START;
         SIX:
-            next_state <= almost_finish ? IDLE : START;
+            next_state = almost_finish ? IDLE : START;
     endcase
+end
 //  - data i and relu --------------------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) 
@@ -171,32 +173,19 @@ generate
         end
         always_ff@(posedge clk or negedge rst_n)
             if (!rst_n) 
-                data_reg <= '0;
+                data_reg[i] <= '0;
             else if (state == START) 
                 data_reg[i] <= data_i[i][7:0];
             
     end
 endgenerate
 
-always_comb guard_map = is_diff ? bit_mode  ? guard_map_4 : guard_map_8 : guard_map_4_8;
+always_comb guard_o = is_diff ? bit_mode  ? guard_map_4 : guard_map_8 : guard_map_4_8;
 
-always_ff@(posedge clk or negedge rst_n)
-    if (!rst_n) {
-        guard_o
-    }<= '0;
-    else if (state == START) begin
-        guard_o <= guard_map;
-    end
+
 //  - data o --------------------------------------------------------------------
 
-always_ff@(posedge clk or negedge rst_n)
-    if (!rst_n) {
-        data_o
-    }<= '0;
-    else begin
-        if (state == START) 
-            guard_o <= guard_map;
-    end
+
 always_comb begin
     if (!bit_mode) data_o = data_i[6 - state];
     else data_o = {data_reg[7-state][3:0], data_reg[6-state][3:0]}; 

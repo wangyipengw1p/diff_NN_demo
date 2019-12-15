@@ -43,31 +43,31 @@ logic                                    kernel_mode;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
         ctrl_ready   <= 1;
-        ctrl_finish  <= 0;
     end else begin
         if (ctrl_valid  && ctrl_ready )     ctrl_ready  <= 0;
         if (ctrl_finish  && !ctrl_ready )   ctrl_ready  <= 1;
         if (fifo_full  && ctrl_ready )    ctrl_ready  <= 0;          //?
-        if (!fifo_full  && !ctrl_ready )   ctrl_ready  <= 1;
-        ctrl_finish  <= 0;
-        case(state)
-            IDLE:
-                if(ctrl_valid  && ctrl_ready  && guard_map_i == 0) ctrl_finish  <= 1;
-            ONE:
-                if(guard_map[4:0] == 0) ctrl_finish  <= 1;
-            TWO:
-                if(guard_map[3:0] == 0) ctrl_finish  <= 1;
-            THREE:
-                if(guard_map[2:0] == 0) ctrl_finish  <= 1;
-            FOUR:
-                if(guard_map[1:0] == 0) ctrl_finish  <= 1;
-            FIVE:
-                if(guard_map[0] == 0) ctrl_finish  <= 1;
-            SIX:
-                ctrl_finish  <= 1;
-        endcase 
+        if (!fifo_full  && !ctrl_ready )   ctrl_ready  <= 1;  
     end
-
+always_comb begin
+    ctrl_finish  = 0;
+    case(state)
+        IDLE:
+            if(ctrl_valid  && ctrl_ready  && guard_map_i == 0) ctrl_finish  = 1;
+        ONE:
+            if(guard_map[4:0] == 0) ctrl_finish  = 1;
+        TWO:
+            if(guard_map[3:0] == 0) ctrl_finish  = 1;
+        THREE:
+            if(guard_map[2:0] == 0) ctrl_finish  = 1;
+        FOUR:
+            if(guard_map[1:0] == 0) ctrl_finish  = 1;
+        FIVE:
+            if(guard_map[0] == 0) ctrl_finish  = 1;
+        SIX:
+            ctrl_finish  = 1;
+    endcase 
+end
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)
         {
@@ -87,64 +87,67 @@ always_ff@(posedge clk or negedge rst_n)
         end
     end
 // activation_en_o
-always_comb activation_en_o  = state == IDLE  ? 0 : 1;
+always_comb activation_en_o  = state == IDLE  ? 0 : fifo_full ? 0:1;
 // - state & mode ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) state <= IDLE;
     else if (!fifo_full )                 //only first row's fifo full signals were connected, may cause reliablity problem
         state <= next_state;
 
-always_comb 
+always_comb begin
+    next_state = state;
     case(state)
         IDLE:
             if(ctrl_valid && ctrl_ready)
                 case(guard_map_i)
-                    6'b1?????: next_state <= ONE;
-                    6'b01????: next_state <= TWO;
-                    6'b001???: next_state <= THREE;
-                    6'b0001??: next_state <= FOUR;
-                    6'b00001?: next_state <= FIVE;
-                    6'b000001: next_state <= SIX;
-                    default:   next_state <= IDLE;
+                    6'b1?????: next_state = ONE;
+                    6'b01????: next_state = TWO;
+                    6'b001???: next_state = THREE;
+                    6'b0001??: next_state = FOUR;
+                    6'b00001?: next_state = FIVE;
+                    6'b000001: next_state = SIX;
+                    default:   next_state = IDLE;
                 endcase
         ONE:
             case(guard_map[4:0])
-                5'b1????: next_state <= TWO;
-                5'b01???: next_state <= THREE;
-                5'b001??: next_state <= FOUR;
-                5'b0001?: next_state <= FIVE;
-                5'b00001: next_state <= SIX;
-                default:  next_state <= IDLE;
+                5'b1????: next_state = TWO;
+                5'b01???: next_state = THREE;
+                5'b001??: next_state = FOUR;
+                5'b0001?: next_state = FIVE;
+                5'b00001: next_state = SIX;
+                default:  next_state = IDLE;
             endcase
         TWO:
             case(guard_map[3:0])
-                4'b1???:  next_state <= THREE;
-                4'b01??:  next_state <= FOUR;
-                4'b001?:  next_state <= FIVE;
-                4'b0001:  next_state <= SIX;
-                default:  next_state <= IDLE;
+                4'b1???:  next_state = THREE;
+                4'b01??:  next_state = FOUR;
+                4'b001?:  next_state = FIVE;
+                4'b0001:  next_state = SIX;
+                default:  next_state = IDLE;
             endcase
         THREE:
             case(guard_map[2:0])
-                3'b1??:   next_state <= FOUR;
-                3'b01?:   next_state <= FIVE;
-                3'b001:   next_state <= SIX;
-                default:  next_state <= IDLE;
+                3'b1??:   next_state = FOUR;
+                3'b01?:   next_state = FIVE;
+                3'b001:   next_state = SIX;
+                default:  next_state = IDLE;
             endcase
         FOUR:
             case(guard_map[1:0])
-                2'b1?:   next_state <= FIVE;
-                2'b01:   next_state <= SIX;
-                default:  next_state <= IDLE;
+                2'b1?:    next_state = FIVE;
+                2'b01:    next_state = SIX;
+                default:  next_state = IDLE;
             endcase
         FIVE:
-            if(guard_map[0] == 1) next_state <= SIX;
-            else next_state <= IDLE;
+            if(guard_map[0] == 1) next_state = SIX;
+            else next_state = IDLE;
         SIX:
-            next_state <= IDLE;
+            next_state = IDLE;
     endcase
+end
 // weight mode
-always_comb 
+always_comb begin
+    weight_mode = E_MODE;
     if(kernel_mode == 0) weight_mode = E_MODE;
     else 
         case(state)
@@ -153,4 +156,5 @@ always_comb
             TWO,FOUR,SIX:
                 weight_mode = is_odd_row ? C_MODE : D_MODE;
         endcase
+end
 endmodule

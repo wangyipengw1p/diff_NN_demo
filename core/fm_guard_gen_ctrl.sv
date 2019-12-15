@@ -95,13 +95,13 @@ always_ff@(posedge clk or negedge rst_n)
             count_3     <= '0;
         end else if(psum_almost_valid)begin
             if(count_w < 6 && count_h == 0) begin
-                count_c --;
+                count_c <= count_c - 1;
                 count_h <= h_num;
             end else if (count_w < 6) begin
                 count_w <= w_num + 6;       // avoid negetive value             !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                count_h --;
-                is_even_row ++;
-                if(is_even_row) is_even_even_row ++;
+                count_h <= count_h - 1;
+                is_even_row <= is_even_row + 1;
+                if(is_even_row) is_even_even_row <= is_even_even_row + 1;
                 if(kernel_mode && is_even_row || !kernel_mode) begin
                     count_3  <= count_3 == 2'd2 ? '0 : count_3 + 1;
                 end

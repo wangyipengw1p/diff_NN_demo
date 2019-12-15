@@ -61,19 +61,19 @@ logic                                                                           
 logic                                                                                core_finish;
 logic                                                                                core_bit_mode_i;
 logic                                                                                core_fm_ping_pong_i;
-logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                       load_fm_wr_addr;
-logic [7 : 0][CONF_PE_COL - 1 : 0]                                                   load_fm_din;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       load_fm_wr_addr;
+logic [CONF_PE_COL - 1 : 0][7 : 0]                                                   load_fm_din;
 logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en;         
 logic [CONF_PE_COL - 1 : 0]                                                          load_fm_ping_pong;
-logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0]                    load_gd_wr_addr;
-logic [5 : 0][CONF_PE_COL - 1 : 0]                                                   load_gd_din;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    load_gd_wr_addr;
+logic [CONF_PE_COL - 1 : 0][5 : 0]                                                   load_gd_din;
 logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en;         
 logic [CONF_PE_COL - 1 : 0]                                                          load_gd_ping_pong;
-logic [$clog2(CONF_WT_BUF_DEPTH) - 1 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]  load_wt_wr_addr;
-logic [5 : 0][CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                              load_wt_din;
-logic [CONF_PE_COL - 1 : 0][CONF_PE_ROW - 1 : 0]                                     load_wt_wr_en;         
-logic [$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0][CONF_PE_ROW - 1 : 0]                     load_bias_wr_addr;
-logic [5 : 0][CONF_PE_ROW - 1 : 0]                                                   load_bias_din;
+logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][$clog2(CONF_WT_BUF_DEPTH) - 1 : 0]  load_wt_wr_addr;
+logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][5 : 0]                              load_wt_din;
+logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                     load_wt_wr_en;         
+logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                     load_bias_wr_addr;
+logic [CONF_PE_ROW - 1 : 0][5 : 0]                                                   load_bias_din;
 logic [CONF_PE_ROW - 1 : 0]                                                          load_bias_wr_en;
 // - CORE -----------------------------------------------------------------------
 diff_core_top  inst_diff_core_top(.*);

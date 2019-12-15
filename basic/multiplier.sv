@@ -20,8 +20,8 @@ module multiplier(
     output logic [PSUM_WIDTH - 1 : 0] ans
 );
 logic [PSUM_WIDTH/2 - 1 : 0] ans1, ans2;
-always_comb ans1[PSUM_WIDTH - 1 : 12] = '0;
-always_comb ans2[PSUM_WIDTH - 1 : 12] = '0;
+always_comb ans1[PSUM_WIDTH/2 - 1 : 12] = '0;
+always_comb ans2[PSUM_WIDTH/2 - 1 : 12] = '0;
 mul mul1(
     .a   (a[7:4]),
     .b   (b),
