@@ -23,7 +23,7 @@ module diff_core_top(
     output logic                                                                                core_finish,
     input  logic                                                                                core_bit_mode_i,
     //input  logic                                                                                core_fm_ping_pong_i,
-    input  logic                                                                                core_is_diff,
+    input  logic                                                                                core_is_diff_i,
     //
     input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       load_fm_wr_addr,
     input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   load_fm_din,
@@ -54,8 +54,8 @@ logic                                                                fm_guard_ge
 logic [7 : 0 ]                                                       w_num;
 logic [7 : 0 ]                                                       h_num;
 logic [7 : 0 ]                                                       c_num;
-logic [CONF_PE_COL - 1 : 0]                                          bit_mode;             
-logic [CONF_PE_COL - 1 : 0]                                          kernel_mode;
+logic                                                                bit_mode;             
+logic                                                                kernel_mode;
 logic                                                                is_diff;
 logic [CONF_PE_COL - 1 : 0]                                          is_odd_row;
 logic                                                                is_first;
@@ -133,30 +133,26 @@ generate
     for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_fm_guard
         two_port_mem #(
             .BIT_LENGTH(72),        //8*9
-            .DEPTH(CONF_FM_BUF_DEPTH),
-            .MODE("block")
+            .DEPTH(CONF_FM_BUF_DEPTH)
         )fm_buf(
             .*,
             .addra          (fm_wr_addr[j]),
             .addrb          (fm_rd_addr[j]),
             .dina           (fm_din[j]),
             .wea            (fm_wr_en[j]),
-            .ena            (1),
-            .enb            (1),
+            .enb            ('1),
             .doutb          (fm_dout[j])
         );
         two_port_mem #(
             .BIT_LENGTH(72),        //6*12
-            .DEPTH(CONF_GUARD_BUF_DEPTH),
-            .MODE("block")
+            .DEPTH(CONF_GUARD_BUF_DEPTH)
         )guard_buf(
             .*,
             .addra          (gd_wr_addr[j]),
             .addrb          (gd_rd_addr[j]),
             .dina           (gd_din[j]),
             .wea            (gd_wr_en[j]),
-            .ena            (1),
-            .enb            (1),
+            .enb            ('1),
             .doutb          (gd_dout[j])
         );
     end
@@ -166,31 +162,27 @@ generate
         for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_wt_line
             two_port_mem #(
                 .BIT_LENGTH(25 * 8),
-                .DEPTH(CONF_WT_BUF_DEPTH),
-                .MODE("block")
+                .DEPTH(CONF_WT_BUF_DEPTH)
             )wt_buf(
                 .*,
                 .addra          (load_wt_wr_addr[i][j]),
                 .addrb          (wt_rd_addr[i][j]),
                 .dina           (load_wt_din[i][j]),
                 .wea            (load_wt_wr_en[i][j]),
-                .ena            (1),
-                .enb            (1),
+                .enb            ('1),
                 .doutb          (wt_dout[i][j])
             );
         end
         two_port_mem #(
                 .BIT_LENGTH(6*8),
-                .DEPTH(CONF_BIAS_BUF_DEPTH),
-                .MODE("block")
+                .DEPTH(CONF_BIAS_BUF_DEPTH)
         )bias_buf(
             .*,
             .addra          (load_bias_wr_addr[i]),
             .addrb          (bias_rd_addr[i]),
             .dina           (load_bias_din[i]),
             .wea            (load_bias_wr_en[i]),
-            .ena            (1),
-            .enb            (1),
+            .enb            ('1),
             .doutb          (bias_dout[i])
         );
     end

@@ -1,4 +1,4 @@
-/*======================================================
+ /*======================================================
 Descripton:
 simple two port RAM with single clk
 
@@ -15,22 +15,33 @@ TODO:
 module two_port_mem#(
     parameter BIT_LENGTH = 64,
     parameter DEPTH = 16,
-    parameter MODE = "block"
+    parameter MODE = "block",       // block; distribute; ultra
+    parameter INIT_FILE = ""
 ) (
     input  logic                             clk,
     input  logic [$clog2(DEPTH) - 1 : 0 ]    addra,
     input  logic [$clog2(DEPTH) - 1 : 0 ]    addrb,
     input  logic [BIT_LENGTH       - 1 : 0 ] dina,
     input  logic                             wea,   
-    input  logic                             ena,
     input  logic                             enb,
     output logic [BIT_LENGTH       - 1 : 0 ] doutb                      
 );
 
-(*ram_style = MODE*)reg [BIT_LENGTH - 1 : 0] BRAM [ (1 << $clog2(DEPTH)) - 1 : 0 ];
+(*ram_style = MODE*) logic [BIT_LENGTH - 1 : 0] BRAM [ (1 << $clog2(DEPTH)) - 1 : 0 ];
+  generate
+    if (INIT_FILE != "") begin: use_init_file
+      initial
+        $readmemh(INIT_FILE, BRAM, 0, DEPTH-1);
+    end else begin: init_bram_to_zero
+      integer ram_index;
+      initial
+        for (ram_index = 0; ram_index < DEPTH; ram_index = ram_index + 1)
+          BRAM[ram_index] = {(BIT_LENGTH/2){2'b10}};                                          //for test
+    end
+  endgenerate
 
+//-------------------------------------------------
   always @(posedge clk)
-    if (ena)
       if (wea)
         BRAM[addra] <= dina;
 

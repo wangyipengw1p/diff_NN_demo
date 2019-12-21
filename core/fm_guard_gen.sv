@@ -69,7 +69,6 @@ two_port_mem #(
     .addrb      (buf_addr),
     .dina       (buf_data_in),
     .wea        (buf_wr_en_1),
-    .ena        ('1),
     .enb        (psum_almost_valid),
     .doutb      (buf_data_out_1)
 );
@@ -82,7 +81,6 @@ two_port_mem #(
     .addrb      (buf_addr),
     .dina       (buf_data_in),
     .wea        (buf_wr_en_2),
-    .ena        ('1),
     .enb        (psum_almost_valid),
     .doutb      (buf_data_out_2)
 );
@@ -276,7 +274,6 @@ ping_pong_buffer #(
     .addrb      (psum_buf_rd_addr),
     .dina       (psum_buf_data_in),
     .wea        (psum_buf_wr_en),
-    .ena        ('1),
     .enb        ('1),
     .doutb      (psum_buf_data_out),
     .ping_pong  (psum_buf_ping_pong)
@@ -372,7 +369,6 @@ two_port_mem #(
     .addrb      (ref_buf_addr),
     .dina       (ref_buf_data_in),
     .wea        (ref_buf_wr_en),
-    .ena        ('1),
     .enb        ('1),
     .doutb      (ref_buf_data_out)
 );

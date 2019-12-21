@@ -19,7 +19,7 @@ module PE (
     //
     input  PE_state_t                               state,
     input  PE_weight_mode_t                         weight_mode,
-    input logic                                     finish,
+    input logic                                     finish,         //finish signal by col ctrl
     input  logic                                    end_of_row,
     input  logic [25 * 8 - 1 : 0]                   weight_i,
     //
@@ -34,19 +34,19 @@ module PE (
 );
 genvar i, j;
 // - general ----------------------------------------------
-logic [7 : 0][2 : 0][PSUM_WIDTH - 1 : 0] pre_psum;
+logic [7 : 0][2 : 0][PSUM_WIDTH - 1 : 0] pre_psum, pre_psum_next;
 
 // special for 5*5 kernel
 logic tick_tock;            // even or odd row
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) 
         tick_tock <= 0;
-    else if(weight_mode == E_MODE)
-        tick_tock <= 1;
-    else if(end_of_row && finish) 
-        tick_tock <= 0;
-    else if(finish) 
-        tick_tock += 1;
+    else begin
+        if(end_of_row && finish)                                                // reset when start?
+            tick_tock <= 0;
+        if(finish) 
+            tick_tock <= tick_tock +  1;
+    end 
 // - weight -------------------------------------------------------
 PE_weight_t weight;
 always_ff@(posedge clk or negedge rst_n)
@@ -110,7 +110,7 @@ always_comb begin
     add_b = '0;
     case(weight_mode)
         E_MODE:begin
-            add_a = {pre_psum[8-state], pre_psum[7-state]};
+            if(state != IDLE) add_a = {pre_psum[8-state], pre_psum[7-state]};
             add_b = mul_ans_conv[8:3];
         end
         A_MODE, B_MODE:begin
@@ -135,64 +135,69 @@ always_ff@(posedge clk or negedge rst_n)
     else if(finish == 1 && end_of_row)      // deal with corner value
         pre_psum <= '0;
     else if(finish == 1 && tick_tock)
-        pre_psum <= {pre_psum[1:0],'0};
-    else if (state != IDLE) begin
-        case(weight_mode)
-            E_MODE: begin
-                {pre_psum[8-state],pre_psum[7-state]} <= add_ans;
-                pre_psum[6-state] <= mul_ans_conv[2:0];
+        pre_psum <= pre_psum_next[1:0] << (6*3*PSUM_WIDTH);
+    else if (state != IDLE) 
+        pre_psum <= pre_psum_next;
+
+always_comb begin
+    pre_psum_next <= pre_psum;
+    case(weight_mode)
+        E_MODE: begin
+            {pre_psum_next[8-state],pre_psum_next[7-state]} <= add_ans;
+            pre_psum_next[6-state] <= mul_ans_conv[2:0];
+        end
+        A_MODE: 
+            if(!tick_tock) begin
+                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
+                pre_psum_next[6-((state+1) >> 1)] <= mul_ans_conv[2:0];
+            end else begin
+                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
+                pre_psum_next[3-((state+1) >> 1)] <= mul_ans_conv[2:0];
             end
-            A_MODE: 
-                if(!tick_tock) begin
-                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
-                    pre_psum[6-((state+1) >> 1)] <= mul_ans_conv[2:0];
-                end else begin
-                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
-                    pre_psum[3-((state+1) >> 1)] <= mul_ans_conv[2:0];
-                end
-            B_MODE:
-                if(!tick_tock) 
-                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
-                else 
-                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
-            C_MODE:
-                if(!tick_tock) begin
-                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
-                    //pre_psum[8-((state+1) >> 1)][2] <= '0;                                //clear: unnecessary
-                    //pre_psum[7-((state+1) >> 1)][2] <= '0;
-                    pre_psum[6-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
-                end else begin
-                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
-                    // pre_psum[5-((state+1) >> 1)][2] <= '0;
-                    //pre_psum[4-((state+1) >> 1)][2] <= '0;
-                    pre_psum[3-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
-                end
-            D_MODE:
-                if(!tick_tock) begin
-                    {pre_psum[8-((state+1) >> 1)],pre_psum[7-((state+1) >> 1)]} <= add_ans;
-                    //pre_psum[8-((state+1) >> 1)][2] <= '0;
-                    //pre_psum[7-((state+1) >> 1)][2] <= '0;
-                end else begin
-                    {pre_psum[5-((state+1) >> 1)],pre_psum[4-((state+1) >> 1)]} <= add_ans;
-                    //pre_psum[5-((state+1) >> 1)][2] <= '0;
-                    //pre_psum[4-((state+1) >> 1)][2] <= '0;
-                end
-        endcase
-    end
+        B_MODE:
+            if(!tick_tock) 
+                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
+            else 
+                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
+        C_MODE:
+            if(!tick_tock) begin
+                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
+                //pre_psum_next[8-((state+1) >> 1)][2] <= '0;                                //clear: unnecessary
+                //pre_psum_next[7-((state+1) >> 1)][2] <= '0;
+                pre_psum_next[6-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
+            end else begin
+                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
+                // pre_psum_next[5-((state+1) >> 1)][2] <= '0;
+                //pre_psum_next[4-((state+1) >> 1)][2] <= '0;
+                pre_psum_next[3-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
+            end
+        D_MODE:
+            if(!tick_tock) begin
+                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
+                //pre_psum_next[8-((state+1) >> 1)][2] <= '0;
+                //pre_psum_next[7-((state+1) >> 1)][2] <= '0;
+            end else begin
+                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
+                //pre_psum_next[5-((state+1) >> 1)][2] <= '0;
+                //pre_psum_next[4-((state+1) >> 1)][2] <= '0;
+            end
+    endcase
+end
 // - fifo ----------------------------------------------------------
 logic [2 : 0][5 : 0][PSUM_WIDTH - 1 : 0] fifo_din;
-// Trans                                                                                   ok?
+// Trans                                                                                   how to avoid strange logic gen by systhesis tool?
 generate 
     for(i = 5; i >= 0; i --) begin: trans_i
         for(j = 2; j >= 0; j --) begin:trans_j
-            assign fifo_din[j][i] = pre_psum[i][j];             //??
+            assign fifo_din[j][i] = pre_psum_next[i][j];             //now op for performance, could op for timing here: pospone 1 clk cycle wr
         end
     end
 endgenerate
 
 fifo_sync #(
     .DATA_WIDE(3*6*PSUM_WIDTH),
-    .FIFO_DEPT(FIFO_DEPTH)
+    .FIFO_DEPT(FIFO_DEPTH),
+    .MODE("distribute")
 )inst_fifo(
     .*,
     .din(fifo_din),

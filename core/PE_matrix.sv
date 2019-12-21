@@ -46,10 +46,10 @@ module PE_matrix(
     //     
     output logic [CONF_PE_ROW - 1 : 0]                  write_back_finish,
     output logic [CONF_PE_ROW - 1 : 0][7 : 0]           write_back_data_o,      
-    input  logic [CONF_PE_ROW - 1 : 0]                  fm_buf_ready,           
+    //input  logic [CONF_PE_ROW - 1 : 0]                  fm_buf_ready,           
     output logic [CONF_PE_ROW - 1 : 0]                  write_back_data_o_valid,
     output logic [CONF_PE_ROW - 1 : 0][5 : 0]           guard_o,                
-    input  logic [CONF_PE_ROW - 1 : 0]                  guard_buf_ready,        
+    //input  logic [CONF_PE_ROW - 1 : 0]                  guard_buf_ready,        
     output logic [CONF_PE_ROW - 1 : 0]                  guard_o_valid          
 );
 genvar i, j, k;
@@ -94,7 +94,7 @@ generate
         logic [CONF_PE_COL - 1 : 0]     fifo_empty;
         //logic [CONF_PE_COL - 1 : 0]     fifo_full;
         always_comb fifo_rd_en = ~|fifo_empty;                      // && psum gen ready
-        for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_row
+        for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_PE_row
             logic [3*6*PSUM_WIDTH - 1:0] fifo_dout;
             PE inst_PE(
                 .*,
@@ -112,10 +112,10 @@ generate
             );
         end
         // adder tree
-        logic [17 : 0][CONF_PE_COL*PSUM_WIDTH - 1 : 0] to_add;
+        logic [17 : 0][CONF_PE_COL - 1 : 0][PSUM_WIDTH - 1 : 0] to_add;
         for(k = 17; k >= 0; k--)begin:gen_18_adder_tree      //3*6 adder
             for(genvar m = CONF_PE_COL - 1; m >= 0; m--)begin:trans_to_add_matrix   //comb transform
-                always_comb to_add[k][m] = inst_row[m].fifo_dout[(k+1)*PSUM_WIDTH - 1 -: PSUM_WIDTH];
+                always_comb to_add[k][m] = inst_PE_row[m].fifo_dout[(k+1)*PSUM_WIDTH - 1 -: PSUM_WIDTH];
             end
             adder_tree #(
                 .IN_WIDTH(PSUM_WIDTH),
@@ -176,6 +176,7 @@ fm_guard_gen_ctrl inst_fm_guard_gen_ctrl(
 generate
     for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:fm_guard_gen_per_row
         fm_guard_gen inst_fm_guard_gen(
+            .*,
             .w_num                    (connect_w_num), 
             .h_num                    (connect_h_num), 
             //.c_num                    (connect_c_num), 
@@ -186,6 +187,7 @@ generate
             .count_c                  (connect_count_c),     
             .is_even_row              (connect_is_even_row),                     
             .is_even_even_row         (connect_is_even_even_row),
+            .is_diff                  (connect_is_diff),
             .is_first                 (connect_is_first),             
             .count_3                  (connect_count_3),     
             .psum_almost_valid        (psum_almost_valid[i]),             

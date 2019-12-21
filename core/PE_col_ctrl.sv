@@ -40,17 +40,18 @@ PE_state_t next_state;
 logic [5 : 0]                            guard_map;
 logic                                    is_odd_row;
 logic                                    kernel_mode;
+logic                                    running;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
-        ctrl_ready   <= 1;
+        ctrl_ready      <= '1;
     end else begin
-        if (ctrl_valid  && ctrl_ready )     ctrl_ready  <= 0;
-        if (ctrl_finish  && !ctrl_ready )   ctrl_ready  <= 1;
-        if (fifo_full  && ctrl_ready )    ctrl_ready  <= 0;          //?
-        if (!fifo_full  && !ctrl_ready )   ctrl_ready  <= 1;  
+        if (ctrl_ready && ctrl_valid)ctrl_ready <= '0;
+        if (ctrl_finish) ctrl_ready <= '1;
+        if (fifo_full) ctrl_ready <= '0;
+        
     end
 always_comb begin
-    ctrl_finish  = 0;
+    ctrl_finish  = '0;
     case(state)
         IDLE:
             if(ctrl_valid  && ctrl_ready  && guard_map_i == 0) ctrl_finish  = 1;
@@ -99,45 +100,36 @@ always_comb begin
     case(state)
         IDLE:
             if(ctrl_valid && ctrl_ready)
-                case(guard_map_i)
-                    6'b1?????: next_state = ONE;
-                    6'b01????: next_state = TWO;
-                    6'b001???: next_state = THREE;
-                    6'b0001??: next_state = FOUR;
-                    6'b00001?: next_state = FIVE;
-                    6'b000001: next_state = SIX;
-                    default:   next_state = IDLE;
-                endcase
+                if(guard_map_i[5] == 1) next_state = ONE;
+                else if(guard_map_i[4] == 1) next_state = TWO;
+                else if(guard_map_i[3] == 1)  next_state = THREE;
+                else if(guard_map_i[2] == 1)  next_state = FOUR;
+                else if(guard_map_i[1] == 1)  next_state = FIVE;
+                else if(guard_map_i[0] == 1)  next_state = SIX;
+                else  next_state = IDLE;
+                
         ONE:
-            case(guard_map[4:0])
-                5'b1????: next_state = TWO;
-                5'b01???: next_state = THREE;
-                5'b001??: next_state = FOUR;
-                5'b0001?: next_state = FIVE;
-                5'b00001: next_state = SIX;
-                default:  next_state = IDLE;
-            endcase
+            if(guard_map[4] == 1) next_state = TWO;
+            else if(guard_map[3] == 1) next_state = THREE;
+            else if(guard_map[2] == 1) next_state = FOUR;
+            else if(guard_map[1] == 1) next_state = FIVE;
+            else if(guard_map[0] == 1) next_state = SIX;
+            else  next_state = IDLE;
         TWO:
-            case(guard_map[3:0])
-                4'b1???:  next_state = THREE;
-                4'b01??:  next_state = FOUR;
-                4'b001?:  next_state = FIVE;
-                4'b0001:  next_state = SIX;
-                default:  next_state = IDLE;
-            endcase
+            if(guard_map[3] == 1) next_state = THREE;
+            else if(guard_map[2] == 1) next_state = FOUR;
+            else if(guard_map[2] == 1) next_state = FIVE;
+            else if(guard_map[2] == 1) next_state = SIX;
+            else next_state = IDLE;
         THREE:
-            case(guard_map[2:0])
-                3'b1??:   next_state = FOUR;
-                3'b01?:   next_state = FIVE;
-                3'b001:   next_state = SIX;
-                default:  next_state = IDLE;
-            endcase
+            if(guard_map[2] == 1)next_state = FOUR;
+            else if(guard_map[1] == 1) next_state = FIVE;
+            else if(guard_map[0] == 1) next_state = SIX;
+            else next_state = IDLE;
         FOUR:
-            case(guard_map[1:0])
-                2'b1?:    next_state = FIVE;
-                2'b01:    next_state = SIX;
-                default:  next_state = IDLE;
-            endcase
+            if(guard_map[1] == 1) next_state = FIVE;
+            else if(guard_map[0] == 1) next_state = SIX;
+            else next_state = IDLE;
         FIVE:
             if(guard_map[0] == 1) next_state = SIX;
             else next_state = IDLE;

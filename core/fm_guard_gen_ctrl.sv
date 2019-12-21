@@ -53,7 +53,7 @@ always_ff@(posedge clk or negedge rst_n)
         ctrl_finish <= 0;
         if (ctrl_valid && ctrl_ready)     ctrl_ready <= 0;
         if (ctrl_finish && !ctrl_ready)   ctrl_ready <= 1;
-        if (count_w < 6 && count_h == 0 && count_c == 0) ctrl_finish <= 1;
+        if (count_w < 6 && count_h == 0 && count_c == 0 && !ctrl_ready) ctrl_finish <= 1;
     end
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)

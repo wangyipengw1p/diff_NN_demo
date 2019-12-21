@@ -14,7 +14,8 @@ Notes:
 =========================================================*/
 module fifo_sync#(
     parameter DATA_WIDE = 64,
-    parameter FIFO_DEPT = 16
+    parameter FIFO_DEPT = 16,
+    parameter MODE = "block"
 )
 (
     //interface to top
@@ -64,7 +65,7 @@ end else if (!full && wr_en) begin
 end
 
 //memory
-logic [ DATA_WIDE - 1 : 0 ] FIFO [ FIFO_DEPT ];
+(*ram_style = MODE*)logic [ DATA_WIDE - 1 : 0 ] FIFO [ FIFO_DEPT ];
 always @(posedge clk) begin
     if (wr_en && !full)  FIFO [wr_addr] <= din;
     if (rd_en) dout  <= empty ? {DATA_WIDE{1'b0}} : FIFO[rd_addr];
