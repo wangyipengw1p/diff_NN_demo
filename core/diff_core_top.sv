@@ -48,14 +48,20 @@ genvar i, j;
 logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_valid;
 logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_ready;
 logic [CONF_PE_COL - 1 : 0]                                          PE_col_ctrl_finish;
+logic [CONF_PE_COL - 1 : 0]                                          in_layer_finish_col;
+logic [CONF_PE_COL - 1 : 0]                                          in_gate_col;
 logic                                                                fm_guard_gen_ctrl_valid  ;
 logic                                                                fm_guard_gen_ctrl_ready  ;
 logic                                                                fm_guard_gen_ctrl_finish ;
 logic [7 : 0 ]                                                       w_num;
 logic [7 : 0 ]                                                       h_num;
 logic [7 : 0 ]                                                       c_num;
+logic [7 : 0 ]                                                       co_num;
+logic [7 : 0 ]                                                       wb_w_num;
+logic [7 : 0 ]                                                       wb_w_cut;
 logic                                                                bit_mode;             
 logic                                                                kernel_mode;
+logic                                                                in_bit_mode;
 logic                                                                is_diff;
 logic [CONF_PE_COL - 1 : 0]                                          is_odd_row;
 logic                                                                is_first;
@@ -94,7 +100,7 @@ logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][25*8 - 1 : 0]                  
 //logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                    wt_rd_en;         //rd_en for energy save
 // for bias buf
 logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                    bias_rd_addr;
-logic [CONF_PE_ROW - 1 : 0][5 : 0][7 : 0]                                           bias_dout;
+logic [CONF_PE_ROW - 1 : 0][7 : 0]                                           bias_dout;
 //logic [CONF_PE_ROW - 1 : 0]                                                         bias_rd_en;         //rd_en for energy save
 
 // - instanciation ---------------------------------------------------------------------------------------------------
@@ -104,14 +110,21 @@ PE_matrix inst_PE_matrix(
     .PE_col_ctrl_valid         (PE_col_ctrl_valid),         
     .PE_col_ctrl_ready         (PE_col_ctrl_ready),         
     .PE_col_ctrl_finish        (PE_col_ctrl_finish), 
+    .in_layer_finish_col       (in_layer_finish_col),
+    .in_gate_col               (in_gate_col),
     .fm_guard_gen_ctrl_valid   (fm_guard_gen_ctrl_valid),                 
     .fm_guard_gen_ctrl_ready   (fm_guard_gen_ctrl_ready),                 
     .fm_guard_gen_ctrl_finish  (fm_guard_gen_ctrl_finish),                 
     .w_num_i                   (w_num), 
     .h_num_i                   (h_num), 
     .c_num_i                   (c_num),         
+    .co_num_i                  (co_num),         
+    .wb_w_num_i                (wb_w_num),         
+    .wb_h_num_i                (wb_h_num),         
+    .wb_w_cut_i                (wb_w_cut),         
     .bit_mode_i                (bit_mode),             
-    .kernel_mode_i             (kernel_mode),     
+    .kernel_mode_i             (kernel_mode),  
+    .in_bit_mode_i             (in_bit_mode),             
     .is_diff_i                 (is_diff),
     .is_first_i                (is_first),
     .is_odd_row_i              (is_odd_row),     
@@ -174,7 +187,7 @@ generate
             );
         end
         two_port_mem #(
-                .BIT_LENGTH(6*8),
+                .BIT_LENGTH(8),
                 .DEPTH(CONF_BIAS_BUF_DEPTH)
         )bias_buf(
             .*,

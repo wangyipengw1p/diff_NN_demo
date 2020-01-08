@@ -20,7 +20,9 @@ module write_back(
     input  logic                                                ctrl_valid,
     output logic                                                ctrl_ready,
     output logic                                                ctrl_finish,
-    input  logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0]  stop_addr_i,
+    input  logic [7:0]                                          wb_w_num_i,
+    input  logic [7:0]                                          wb_h_num_i,
+    input  logic [7:0]                                          wb_w_cut_i,
     input  logic                                                is_diff_i,
     //                      
     input  logic [5:0][PSUM_WIDTH - 1 : 0]                      data_i,
@@ -47,13 +49,15 @@ typedef enum logic[2:0] {
 } state_t;
 
 state_t state, next_state;
-logic [5:0] guard_map_8, guard_map_4, guard_map_4_8;
+logic [5:0] guard_map_8, guard_map_4, guard_map_4_8, guard_o_r;
 logic [5:0][7:0] data_reg;
-logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] stop_addr;
 logic almost_finish;
 logic is_diff;
-logic count2; //0: diff 8bit    1: diff 4bit
+logic tick_tock; //0: diff 8bit    1: diff 4bit
 logic bit_mode;
+logic [7:0] wb_w_num;
+logic [7:0] wb_h_num;
+logic [7:0] wb_w_cut;
 // - protacal ---------------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
@@ -66,29 +70,48 @@ always_ff@(posedge clk or negedge rst_n)
         if(almost_finish) ctrl_finish <= 1;
     end
 
-always_comb almost_finish = addr_o == stop_addr ? is_diff ?  count2 ? 1 : 0 : 1 : 0;
+always_comb almost_finish = (count_w == 0 && count_h == 0) && !ctrl_ready ? is_diff ?  tick_tock ? 1 : 0 : 1 : 0;
 
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)
         {
-            stop_addr,
             is_diff ,
-            count2
+            tick_tock,
+            wb_w_num,
+            wb_h_num,
+            wb_w_cut
         } <= '0;
     else begin
         if(ctrl_ready && ctrl_valid) begin
-            stop_addr <= stop_addr_i;
-            is_diff <= is_diff_i;
+            is_diff     <= is_diff_i;
+            wb_w_num    <= wb_w_num_i;
+            wb_h_num    <= wb_h_num_i;
+            wb_w_cut    <= wb_w_cut_i;
         end 
-        if(is_diff && !count2 && addr_o == stop_addr) count2 <= 1;
-        else if(is_diff && count2 && addr_o == stop_addr) count2 <= 0;
+        if(is_diff && !tick_tock && addr_o == stop_addr) tick_tock <= 1;
+        else if(is_diff && tick_tock && addr_o == stop_addr) tick_tock <= 0;
 
     end
-
-always_comb bit_mode = is_diff  ?  count2 ? 1 :  0 :  0;
+// - counters ---------------------------------------------------------------
+logic [7:0] count_w, count_h;
+always_ff@(posedge clk or negedge rst_n)
+    if (!rst_n) {
+        count_w, count_h
+    } <= '0;
+    else begin
+        if(ctrl_ready && ctrl_valid)begin
+            count_w <= wb_w_num_i;
+            count_h <= wb_h_num_i - 1;
+        end
+        if(state == START && count_w == 0) count_h <= count_h - 1;
+        else if(state == START) count_w <= count_w - 6;                 //win size
+    end
+always_comb bit_mode = is_diff  ?  tick_tock ? 1 :  0 :  0;
 // - state ------------------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) 
+        state <= IDLE;
+    else if(ctrl_ready && !ctrl_valid)
         state <= IDLE;
     else 
         state <= next_state;
@@ -96,60 +119,46 @@ always_ff@(posedge clk or negedge rst_n)
 always_comb begin
     next_state = state;
     case(state)
-        IDLE:   next_state =  ctrl_valid && ctrl_ready ? START : IDLE;
+        IDLE: next_state =  ctrl_valid && ctrl_ready ? START : IDLE;
         START:
-            if (bit_mode) next_state = ONE;
-            else
-                case(guard_o)                                                         //---------------might be critical path
-                    6'b1?????: next_state = ONE;
-                    6'b01????: next_state = TWO;
-                    6'b001???: next_state = THREE;
-                    6'b0001??: next_state = FOUR;
-                    6'b00001?: next_state = FIVE;
-                    6'b000001: next_state = SIX;
-                    default:   next_state = almost_finish ? IDLE : START;
-                endcase
+            if(bit_mode) next_state = ONE;                          //[4bit]
+            else if(guard_o[5] == 1) next_state = ONE;
+            else if(guard_o[4] == 1) next_state = TWO;
+            else if(guard_o[3] == 1)  next_state = THREE;
+            else if(guard_o[2] == 1)  next_state = FOUR;
+            else if(guard_o[1] == 1)  next_state = FIVE;
+            else if(guard_o[0] == 1)  next_state = SIX;
+            else  next_state = almost_finish ? IDLE : START;
+                
         ONE:
-            if (bit_mode) next_state = TWO;
-            else
-                case(guard_o[4:0])
-                    5'b1????: next_state = TWO;
-                    5'b01???: next_state = THREE;
-                    5'b001??: next_state = FOUR;
-                    5'b0001?: next_state = FIVE;
-                    5'b00001: next_state = SIX;
-                    default:  next_state = almost_finish ? IDLE : START;
-                endcase
+            if(bit_mode) next_state = TWO;   
+            else if(guard_o_r[4] == 1) next_state = TWO;
+            else if(guard_o_r[3] == 1) next_state = THREE;
+            else if(guard_o_r[2] == 1) next_state = FOUR;
+            else if(guard_o_r[1] == 1) next_state = FIVE;
+            else if(guard_o_r[0] == 1) next_state = SIX;
+            else  next_state = almost_finish ? IDLE : START;
         TWO:
-            if (bit_mode) next_state = THREE;
-            else
-                case(guard_o[3:0])
-                    4'b1???:  next_state = THREE;
-                    4'b01??:  next_state = FOUR;
-                    4'b001?:  next_state = FIVE;
-                    4'b0001:  next_state = SIX;
-                    default:  next_state = almost_finish ? IDLE : START;
-                endcase
+            if(bit_mode) next_state = THREE;   
+            else if(guard_o_r[3] == 1) next_state = THREE;
+            else if(guard_o_r[2] == 1) next_state = FOUR;
+            else if(guard_o_r[2] == 1) next_state = FIVE;
+            else if(guard_o_r[2] == 1) next_state = SIX;
+            else next_state = almost_finish ? IDLE : START;
         THREE:
-            if (bit_mode) next_state = FOUR;
-                else
-                case(guard_o[2:0])
-                    3'b1??:   next_state = FOUR;
-                    3'b01?:   next_state = FIVE;
-                    3'b001:   next_state = SIX;
-                    default:  next_state = almost_finish ? IDLE : START;
-                endcase
+            if(bit_mode) next_state = FOUR;   
+            else if(guard_o_r[2] == 1)next_state = FOUR;
+            else if(guard_o_r[1] == 1) next_state = FIVE;
+            else if(guard_o_r[0] == 1) next_state = SIX;
+            else next_state = almost_finish ? IDLE : START;
         FOUR:
-            if (bit_mode) next_state = FIVE;
-                else
-                case(guard_o[1:0])
-                    2'b1?:   next_state = FIVE;
-                    2'b01:   next_state = SIX;
-                    default:  next_state = almost_finish ? IDLE : START;
-                endcase
+            if(bit_mode) next_state = FIVE;   
+            else if(guard_o_r[1] == 1) next_state = FIVE;
+            else if(guard_o_r[0] == 1) next_state = SIX;
+            else next_state = almost_finish ? IDLE : START;
         FIVE:
-            if (bit_mode) next_state = SIX;
-            else if(guard_o[0] == 1) next_state = SIX;
+            if(bit_mode) next_state = SIX;   
+            else if(guard_o_r[0] == 1) next_state = SIX;
             else next_state = almost_finish ? IDLE : START;
         SIX:
             next_state = almost_finish ? IDLE : START;
@@ -158,17 +167,19 @@ end
 //  - data i and relu --------------------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) 
-        addr_o <= '0;
-    else if(state == IDLE || addr_o == stop_addr)begin
-        addr_o <= '0;
-    end else if(state == START)
-        addr_o ++;
-
+        {addr_o, guard_o_r} <= '0;
+    else begin
+        if(state == START) guard_o_r <= guard_o;
+        if(state == IDLE || almost_finish)begin
+            addr_o <= '0;
+        end else if(state == START)
+            addr_o ++;
+    end
 generate
     for (genvar i = 5; i >= 0; i--)begin:relu
         always_comb begin
             guard_map_4_8[i] = state == START ?  data_i[i][7 : 0] == 0 ? 0 : 1 : 0;      //---------------might be critical path
-            guard_map_4[i] = state == START ? data_i[i][7 : 0] == 0 ? 0: data_i[i][7 : 4] ==  0  ?  1 : 0: 0;
+            guard_map_4[i] = state == START ? data_i[i][7 : 0] == 0 ? 0: data_i[i][7 : 4] ==  0  ?  1 : 0: 0;                       // not used here        [4bit]
             guard_map_8[i] = state == START ? data_i[i][7 : 0] == 0 ? 0: data_i[i][7 : 4] !=  0  ?  1 : 0: 0;
         end
         always_ff@(posedge clk or negedge rst_n)
@@ -180,18 +191,19 @@ generate
     end
 endgenerate
 
-always_comb guard_o = is_diff ? bit_mode  ? guard_map_4 : guard_map_8 : guard_map_4_8;
+// rethink about 4bit
+always_comb guard_o = is_diff ? bit_mode  ? '1 : guard_map_8 : guard_map_4_8;      //valid when state == START for a clk            [4bit]
 
 
 //  - data o --------------------------------------------------------------------
 
-
-always_comb begin
-    if (!bit_mode) data_o = data_i[6 - state];
-    else data_o = {data_reg[7-state][3:0], data_reg[6-state][3:0]}; 
-end 
+// to be optimised for power
+always_comb 
+    if (!bit_mode) data_o = !data_o_valid ? '0 : data_i[6 - state];
+    else data_o = !data_o_valid ? '0 :{data_reg[7-state][3:0], data_reg[6-state][3:0]}; 
+ 
 always_comb begin
     data_o_valid = bit_mode ? state != 0 && state[0] == 0 ? 1 : 0 : state != IDLE && state != START;
-    guard_o_valid = bit_mode ? 0 : state == START && next_state != START;
+    guard_o_valid = state == START && next_state != START;       // tmp: when 4bit, guard will behave as usual                  [4bit]
 end
 endmodule

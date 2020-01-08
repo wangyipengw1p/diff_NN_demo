@@ -1,6 +1,6 @@
 /*======================================================
 Descripton:
-standard sync fifo
+standard sync fifo (with output special)
 
 Create:  
 YuanZhe   yuanzhe@newthu.com  20190824

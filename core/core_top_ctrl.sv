@@ -27,23 +27,32 @@ module core_top_ctrl(
     output logic [CONF_PE_COL - 1 : 0]                                                          PE_col_ctrl_valid,
     input  logic [CONF_PE_COL - 1 : 0]                                                          PE_col_ctrl_ready,
     input  logic [CONF_PE_COL - 1 : 0]                                                          PE_col_ctrl_finish,
+    output logic [CONF_PE_COL - 1 : 0]                                                          in_layer_finish_col,
+    output logic [CONF_PE_COL - 1 : 0]                                                          in_gate_col,
     output logic                                                                                fm_guard_gen_ctrl_valid  ,
-    input  logic                                                                                fm_guard_gen_ctrl_ready  ,//to be added
+    input  logic                                                                                fm_guard_gen_ctrl_ready  ,
     input  logic                                                                                fm_guard_gen_ctrl_finish ,//no use
+    // common 
+    output logic                                                                                is_diff,
+    // for write back
     output logic [7 : 0 ]                                                                       w_num,
     output logic [7 : 0 ]                                                                       h_num,
     output logic [7 : 0 ]                                                                       c_num,
+    output logic [7 : 0 ]                                                                       co_num,
+    output logic [7 : 0 ]                                                                       wb_w_num,
+    output logic [7 : 0 ]                                                                       wb_w_cut,
+    output logic [7 : 0 ]                                                                       wb_h_num,
     output logic                                                                                bit_mode,             
     output logic                                                                                kernel_mode,
-    output logic                                                                                is_diff,
     output logic                                                                                is_first,
+    output logic                                                                                in_bit_mode,             
     output logic [CONF_PE_COL - 1 : 0]                                                          is_odd_row,
     output logic [CONF_PE_COL - 1 : 0]                                                          end_of_row,
     output logic [CONF_PE_COL - 1 : 0][7 : 0]                                                   activation,
     input  logic [CONF_PE_COL - 1 : 0]                                                          activation_en,//?
     output logic [CONF_PE_COL - 1 : 0][5 : 0]                                                   guard_map,   
     output logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][25 * 8 - 1 : 0]                     weight,
-    output logic [CONF_PE_ROW - 1 : 0][5 : 0][7 : 0]                                            bias,
+    output logic [CONF_PE_ROW - 1 : 0][7 : 0]                                                   bias,
     input  logic [CONF_PE_ROW - 1 : 0]                                                          write_back_finish,
     input  logic [CONF_PE_ROW - 1 : 0][7 : 0]                                                   fm_write_back_data,      
     //output logic [CONF_PE_ROW - 1 : 0]                                                          fm_buf_ready,              
@@ -82,14 +91,15 @@ module core_top_ctrl(
     //output logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                     wt_rd_en,          
     // for bias buf 
     output logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                     bias_rd_addr,
-    input  logic [CONF_PE_ROW - 1 : 0][5 : 0][7 : 0]                                            bias_dout
+    input  logic [CONF_PE_ROW - 1 : 0][7 : 0]                                            bias_dout
     //output logic [CONF_PE_ROW - 1 : 0]                                                          bias_rd_en          
 );
 genvar i, j;
 // - ctrl protcol -----------------------------------------------------
 //logic core_fm_ping_pong;
-logic one_layer_finish, finish_all;
-logic tick_tock;                    // for diff
+logic in_one_layer_finish, wb_one_layer_finish, in_finish_all, wb_finish_all;
+logic wb_tick_tock, in_tick_tock;                    // for diff
+logic [2:0] in_layer_num, wb_layer_num;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
         core_ready   <= '1;
@@ -107,55 +117,73 @@ always_ff@(posedge clk or negedge rst_n)
         end
         if (core_finish  && !core_ready )   core_ready  <= '1;
         // ctrl finish here
-        if (finish_all) core_finish <= '1;
+        if (wb_finish_all) core_finish <= '1;
     end
 // - state machine -------------------------------------------------------
-enum logic [2:0] {IDLE, START, PROCESS, FINISH_ONE_LAYER, FINISH} state, next_state;
+enum logic [2:0] {IDLE, START, PROCESS, FINISH_ONE_LAYER, FINISH} in_state, next_in_state, wb_state, next_wb_state;        // this state is for in matrix
+
 
 always_ff@(posedge clk or negedge rst_n)
-    if(!rst_n) state <= IDLE;
-    else state <= next_state;
+    if(!rst_n) {in_state, wb_state} <= IDLE;
+    else begin
+        in_state <= next_in_state;
+        wb_state <= next_wb_state;
+    end
 
 always_comb begin
-    next_state = state;
-    case(state)
-        IDLE:               next_state = core_ready && core_valid ? START : IDLE;
-        START:              next_state = PROCESS;
-        PROCESS:            next_state = finish_all ? FINISH : one_layer_finish ? FINISH_ONE_LAYER  : PROCESS;
-        FINISH_ONE_LAYER:   next_state = START;
-        FINISH:             next_state = IDLE;
+    case(in_state)
+        IDLE:               next_in_state = core_ready && core_valid ? START : IDLE;
+        START:              next_in_state = in_layer_num - wb_layer_num <= 2 ? PROCESS : START;
+        PROCESS:            next_in_state = in_finish_all ? FINISH : in_one_layer_finish ? FINISH_ONE_LAYER  : PROCESS;
+        FINISH_ONE_LAYER:   next_in_state = START;
+        FINISH:             next_in_state = IDLE;
+    endcase
+    case(wb_state)
+        IDLE:               next_wb_state = core_ready && core_valid ? START : IDLE;
+        START:              next_wb_state = in_layer_num - wb_layer_num <= 2 ? PROCESS : START;
+        PROCESS:            next_wb_state = wb_finish_all ? FINISH : wb_one_layer_finish ? FINISH_ONE_LAYER  : PROCESS;
+        FINISH_ONE_LAYER:   next_wb_state = START;
+        FINISH:             next_wb_state = IDLE;
     endcase
 end
 // - layer and parameters -------------------------------------------------------------
-logic [2:0] layer_num;
-logic [7:0] co_num;
-//logic ping_pong_now;
 
-always_comb finish_all = one_layer_finish && layer_num == 5;
-
+// - finish logic -------------------------------------------
+always_comb in_finish_all = in_one_layer_finish && in_layer_num == 5;
+always_comb wb_finish_all = wb_one_layer_finish && wb_layer_num == 5;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) begin
     {
-        layer_num,
-        tick_tock
+        in_layer_num,
+        wb_layer_num,
+        wb_tick_tock,
+        in_tick_tock
     } <= '0;
     end else begin
         if(core_valid  && core_ready) begin
-            layer_num <= 3'd1;
-            tick_tock <= core_is_diff_i ? '0 : '1;
-        end else if (state == IDLE) layer_num <= '0;
-        else if(one_layer_finish && tick_tock) layer_num <= layer_num + 1;
+            in_layer_num <= 3'd1;
+            wb_layer_num <= 3'd1;
+            wb_tick_tock <= core_is_diff_i ? '0 : '1;                      // 8bit then 4bit for diff mode
+            in_tick_tock <= core_is_diff_i ? '0 : '1;                      // 8bit then 4bit for diff mode
+        end else if (core_ready) {in_layer_num, wb_layer_num, wb_tick_tock, in_tick_tock} <= '0;
+        else begin
+            if(in_one_layer_finish && in_tick_tock) in_layer_num <= in_layer_num + 1;
+            if(wb_one_layer_finish) wb_layer_num <= wb_layer_num + 1;               //tick tock is controled by write back module
+            if(wb_one_layer_finish && is_diff) wb_tick_tock <= ~wb_tick_tock;
+            if(in_one_layer_finish && is_diff) in_tick_tock <= ~in_tick_tock;
+        end
 
-        if(one_layer_finish && !tick_tock) tick_tock <= ~tick_tock;
+        
     end
 // hard-coded network parameters, actually could be calculated, but for easy ...
+logic [7:0] wb_co_num;
 always_comb begin
     // bit_mode
-    bit_mode = is_diff ? tick_tock : 0;
+    bit_mode = is_diff ? 1 : 0;
     is_first = 0;                           // will be high for the first layer
-    // w h c
+    in_bit_mode = is_diff ? in_tick_tock : 0;
     // kernel mode
-    case (layer_num)
+    case (in_layer_num)
         3'd1:begin
             w_num = 8'd200;     // ceil(200/4)
             h_num = 8'd66;
@@ -200,6 +228,45 @@ always_comb begin
             kernel_mode = 1;
         end
     endcase
+
+    case(wb_layer_num)
+        3'd1: begin
+            wb_w_num  = 8'd102;
+            wb_h_num  = 8'd31;
+            wb_w_cut  = 8'd0;
+            wb_co_num = 8'd24;
+        end
+        3'd2: begin
+            wb_w_num  = 8'd48;
+            wb_h_num  = 8'd14;
+            wb_w_cut  = 8'd6;
+            wb_co_num = 8'd36;
+        end
+        3'd3: begin
+            wb_w_num  = 8'd24;
+            wb_h_num  = 8'd5;
+            wb_w_cut  = 8'd0;
+            wb_co_num = 8'd48;
+        end
+        3'd4: begin
+            wb_w_num  = 8'd24;
+            wb_h_num  = 8'd3;
+            wb_w_cut  = 8'd0;
+            wb_co_num = 8'd64;
+        end
+        3'd5: begin
+            wb_w_num  = 8'd18;
+            wb_h_num  = 8'd1;
+            wb_w_cut  = 8'd6;
+            wb_co_num = 8'd64;
+        end
+        default: begin
+            wb_co_num = 0;
+            wb_w_num  = 0;
+            wb_h_num  = 0;
+            wb_w_cut  = 0;
+        end
+    endcase
 end
 /*
 always_comb begin
@@ -213,15 +280,22 @@ always_ff@(posedge clk or negedge rst_n)
     else col_ready_d <= PE_col_ctrl_ready; */
 // - In PE matrix ctrl --------------------------------------------------
 
-logic [CONF_PE_COL - 1 : 0] col_finish_input_for_a_layer;
-logic input_one_layer_finish;
-always_comb fm_guard_gen_ctrl_valid = state == START;      //?
-always_comb input_one_layer_finish = &col_finish_input_for_a_layer;
+
+always_comb in_one_layer_finish = &in_layer_finish_col;
+//
+//always_comb fm_guard_gen_ctrl_valid = (wb_state == START || wb_state == PROCESS) && ((!in_bit_mode && !is_diff) || (in_bit_mode && is_diff));      //?
+always_ff@(posedge clk or negedge rst_n)
+    if(!rst_n)fm_guard_gen_ctrl_valid <= '0;
+    else begin
+        if(in_state == START && in_tick_tock == (is_diff ? '0 : '1)) fm_guard_gen_ctrl_valid <= '1;
+        if(fm_guard_gen_ctrl_valid && fm_guard_gen_ctrl_ready) fm_guard_gen_ctrl_valid <= '0;
+    end 
 generate
 for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
     //counters
     logic [7:0] count_w, count_h, count_co, count_ci;
     logic [3:0] cnt_fm, cnt_gd;
+    
     //special counter for input
     always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) {
@@ -238,43 +312,49 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
             else cnt_gd <= cnt_gd + 1;
     end
     // counter for data managment
+    // input finish one layer signal for a collum 
     always_ff@(posedge clk or negedge rst_n)
         if(!rst_n) begin
         {
-            count_w, count_h, count_ci, count_co
+            count_w, count_h, count_ci, count_co,
+            in_layer_finish_col[j],
+            in_gate_col[j]
         } <= '0;
         is_odd_row[j] <= 1;
         end else begin
-            if(state == START ) begin
-                count_w  <= w_num;
-                count_h  <= h_num;
-                count_ci <= j;              //ok?
-                count_co <= '0;
-            end else if(state == PROCESS && activation_en[j]) begin
-                if (count_h == 1 && count_w == 1)begin
-                    count_w <= w_num;
-                    count_h <=  h_num;
-                    if (count_ci + CONF_PE_COL > c_num)begin
-                        count_ci <= count_ci + CONF_PE_COL - c_num;
-                        count_co <= count_co + 1; 
-                    end else count_ci <= count_ci + CONF_PE_COL;
-
-                end else if (count_w == 1)begin
-                    count_w <= w_num;
+            if((in_state == START) || in_one_layer_finish) begin
+                count_w  <= w_num - 1;
+                count_h  <= h_num -1;
+                count_ci <= j;
+                count_co <= 0;
+                if(j > c_num - 1) in_gate_col[j] <= 1;                  //special: if COL NUM > ci num, there will be a rol in IDLE (to be optimised for power)
+                else in_gate_col[j] <= 0;
+            end else if((in_state == PROCESS) && PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j]) begin
+                if (count_h == 0 && count_w < 6)begin
+                    count_w <= w_num - 1;
+                    count_h <=  h_num - 1;
+                    if (in_bit_mode && (count_ci + 2*CONF_PE_COL > c_num - 1) || !in_bit_mode && (count_ci + CONF_PE_COL > c_num - 1))begin                         // if 4bit, ci need add double
+                        count_ci <= j; 
+                        count_co <= count_co + CONF_PE_ROW; 
+                    end else 
+                        count_ci <=  in_bit_mode ?  count_ci + 2*CONF_PE_COL : count_ci + CONF_PE_COL;
+                    
+                end else if (count_w < 6)begin
+                    count_w <= w_num - 1;
                     count_h <= count_h - 1;
                     is_odd_row[j] <= ~is_odd_row[j];
-                end else count_w <= count_w - 1;
+                end else count_w <= count_w - 6;
             end
+
+            if((in_state != IDLE) && count_co == co_num && !in_layer_finish_col[j])        //[co!4]
+                in_layer_finish_col[j] <= 1;
+            if(in_one_layer_finish) in_layer_finish_col[j] <= 0;
+
         end
-    // finish signal 
-    //always_comb col_finish_input_for_a_layer[j] = count_co == co_num - 1 ? '1 : '0;          //?
-    always_ff@(posedge clk or negedge rst_n)
-        if(!rst_n)  col_finish_input_for_a_layer[j] <= 0;
-        else if (count_co == co_num - 1) col_finish_input_for_a_layer[j] <= 1;
-        else if (input_one_layer_finish) col_finish_input_for_a_layer[j] <= 0;
+
     //addr magagement
-    always_comb PE_col_ctrl_valid[j] = PE_col_ctrl_ready[j] && ~core_ready;              // save clk cycle, but ok?
-    always_comb end_of_row[j] = count_w < 6 && count_w != 0? 1 : 0;
+    always_comb PE_col_ctrl_valid[j] = PE_col_ctrl_ready[j] && in_state == PROCESS && !in_layer_finish_col[j];              // save clk cycle,ok?; wait here!!!!!!!!!!!!!!!!!!!!!!
+    always_comb end_of_row[j] = (count_w < 6 && count_w != 0) ? 1 : 0;
     always_ff@(posedge clk or negedge rst_n)
         if(!rst_n) begin
         {
@@ -283,8 +363,8 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         } <= '0;
         end else begin
             if(PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && cnt_gd == 1) gd_rd_addr[j] <= gd_rd_addr[j] + 1;   //1 here?
-            if(state == PROCESS && activation_en[j]) begin
-                if(count_h == 1 && count_w == 1)begin
+            if(in_state == PROCESS && activation_en[j]) begin
+                if(count_h == 0 && count_w < 6)begin
                     fm_rd_addr[j] <= '0;
                     gd_rd_addr[j] <= '0;
                 end else if(cnt_fm == 1) fm_rd_addr[j] <= fm_rd_addr[j] + 1;                          //[think]!!
@@ -298,7 +378,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
             shift_gd
         } <= '0;
         else begin
-            if(state == PROCESS && activation_en[j])
+            if(in_state == PROCESS && activation_en[j])
                 if(cnt_fm == 8) shift_fm <= fm_dout[j];
                 else  shift_fm <= {shift_fm[63:0], 8'd0};
             else if(cnt_fm == 0) shift_fm <= fm_dout[j];
@@ -312,28 +392,31 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
 
 end
 endgenerate
-// - out PE matrix, fm and gd write signals, finish logic-------------------------------------------------
+// - out PE matrix, fm and gd write signals, finish logic -------------------------------------------------
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                ctrl_fm_wr_addr;
 logic [CONF_PE_COL - 1 : 0][7 : 0]                                            ctrl_fm_din;
-logic [CONF_PE_COL - 1 : 0][71 : 0]                                           ctrl_fm_din_f;
+logic [CONF_PE_COL - 1 : 0][71 : 0]                                           ctrl_fm_din_f;        //shift reg for write back
 logic [CONF_PE_COL - 1 : 0]                                                   ctrl_fm_wr_en;      
+logic [CONF_PE_COL - 1 : 0]                                                   ctrl_fm_wr_en_f;      
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             ctrl_gd_wr_addr;
 logic [CONF_PE_COL - 1 : 0][5 : 0]                                            ctrl_gd_din;
 logic [CONF_PE_COL - 1 : 0][71 : 0]                                           ctrl_gd_din_f;
 logic [CONF_PE_COL - 1 : 0]                                                   ctrl_gd_wr_en;      
+logic [CONF_PE_COL - 1 : 0]                                                   ctrl_gd_wr_en_f;      
 logic [CONF_PE_ROW - 1 : 0]                                                   wr_back_finish; //all row finish, then one layer finish
 logic [CONF_PE_ROW - 1 : 0][7:0]                                              now_wb_port;
-logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_addr;
-logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_addr;
-always_comb     one_layer_finish = &wr_back_finish;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_wb_addr;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_wb_addr;
+
+always_comb     wb_one_layer_finish = &wr_back_finish;
 always_comb 
     if(core_ready) begin        //not run
         fm_wr_addr  = ctrl_fm_wr_addr;
         fm_din      = ctrl_fm_din_f;
-        fm_wr_en    = ctrl_fm_wr_en;
+        fm_wr_en    = ctrl_fm_wr_en_f;
         gd_wr_addr  = ctrl_gd_wr_addr;
         gd_din      = ctrl_gd_din_f;
-        gd_wr_en    = ctrl_gd_wr_en;
+        gd_wr_en    = ctrl_gd_wr_en_f;
     end else begin
         fm_wr_addr  = load_fm_wr_addr;
         fm_din      = load_fm_din;
@@ -351,64 +434,115 @@ for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
     if(!rst_n) {
         count_co,
         now_wb_port[i],
-        wr_back_finish[i]
+        wr_back_finish[i],
+        fm_wb_addr[i],
+        gd_wb_addr[i]
     } <= '0;
     else begin
-        if(state == START) begin
+        if(wb_state == START) begin
             count_co <= i;
             now_wb_port[i] <= CONF_PE_ROW - i - 1;
-        end else if (write_back_finish) begin
-            count_co -= CONF_PE_ROW;
+        end else if (write_back_finish[i]) begin
+            count_co <= count_co + CONF_PE_ROW;
             now_wb_port[i] += CONF_PE_ROW;
         end
-        if(write_back_finish) wr_back_finish[i] <= 1;
-        if(one_layer_finish) wr_back_finish[i] <= 0;
-    end
-    
-    always_ff@(posedge clk or negedge rst_n)
-        if(!rst_n) begin
-        {
-            fm_addr[i],
-            gd_addr[i]
-        } <= '0;
-        end else begin
-            if(fm_write_back_data_o_valid) fm_addr[i] <= fm_addr[i] + 1;
-            if(guard_o_valid) gd_addr[i] <= gd_addr[i] + 1;
-            if(write_back_finish)begin
-                fm_addr[i] <= '0;
-                gd_addr[i] <= '0;
-            end
+
+        if(write_back_finish[i] && (count_co + CONF_PE_ROW) > wb_co_num - 1) wr_back_finish[i] <= 1;
+        if(wb_one_layer_finish) wr_back_finish[i] <= 0;
+
+        if(write_back_finish[i]){fm_wb_addr[i], gd_wb_addr[i]} <= '0;
+        else begin
+            if(fm_write_back_data_o_valid[i]) fm_wb_addr[i] <= fm_wb_addr[i] + 1;
+            if(guard_o_valid[i]) gd_wb_addr[i] <= gd_wb_addr[i] + 1;
         end
+    end
 end
-// MUX, but ok?
 endgenerate
 
 // for reconfigurablity of size of PE COL and ROW
+// What will be generated -----------------------------------------------------------------------------
 generate
 for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_write_back_din_en_mux
     always_comb begin
         {
-            ctrl_fm_wr_addr[j],
-            ctrl_gd_wr_addr[j],
             ctrl_fm_wr_en[j]  ,
             ctrl_gd_wr_en[j]  ,
             ctrl_fm_din[j]    ,
-            ctrl_gd_din[j]    
+            ctrl_gd_din[j]    ,
+            ctrl_fm_wr_addr[j],
+            ctrl_gd_wr_addr[j]
         } = '0;
         for( integer i = CONF_PE_ROW - 1; i >= 0; i--) begin
             if(now_wb_port[i] == j)
                 begin
-                    ctrl_fm_wr_addr[j]   = fm_addr[i];
-                    ctrl_gd_wr_addr[j]   = gd_addr[i];
                     ctrl_fm_wr_en[j]     = fm_write_back_data_o_valid[i];
                     ctrl_gd_wr_en[j]     = guard_o_valid[i];
                     ctrl_fm_din[j]       = fm_write_back_data[i];
                     ctrl_gd_din[j]       = guard_o[i];
+                    ctrl_fm_wr_addr[j]   = fm_wb_addr[i];
+                    ctrl_gd_wr_addr[j]   = gd_wb_addr[i];
                 end 
         end
     end
 end
 endgenerate
+// ------------------------------------------------------------------------------------------------------
+//
+// fm guard gen ctrl transfer the main ctrl
+generate
+for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_shift_reg_and_wb_addr
+    //generate shift reg for writeback
+    logic [3:0] cnt_wfm, cnt_wgd;
+    logic [63:0] shift_wfm;
+    logic [65:0] shift_wgd;
+    always_ff@(posedge clk or negedge rst_n)
+    if(!rst_n) {
+        shift_wfm,
+        shift_wgd,
+        cnt_wfm,
+        cnt_wgd
+    } <= '0;
+    else begin
+        if(ctrl_fm_wr_en[j]) begin
+            if(cnt_wfm == 8) cnt_wfm <= 0;
+            else cnt_wfm <= cnt_wfm + 1;
+
+            shift_wfm <= {shift_wfm[55:0], ctrl_fm_din[j]};
+        end
+            
+        if(ctrl_gd_wr_en[j]) begin
+            if(cnt_wgd == 11) cnt_wgd <= 0;
+            else cnt_wgd <= cnt_wgd + 1;
+
+            shift_wgd <= {shift_wgd[59:0], ctrl_gd_din[j]};
+        end
+    end
+
+    always_comb begin
+        ctrl_fm_wr_en_f[j] = ctrl_fm_wr_en[j] && (cnt_wfm == 8);
+        ctrl_gd_wr_en_f[j] = ctrl_gd_wr_en[j] && (cnt_wgd == 11);
+        ctrl_fm_din_f[j]   = {shift_wfm, ctrl_fm_din[j]};
+        ctrl_gd_din_f[j]   = {shift_wgd, ctrl_gd_din[j]};
+    end
+    /*/ gen writeback addr
+    always_ff@(posedge clk or negedge rst_n)
+        if(!rst_n)
+        {
+            ctrl_fm_wr_addr[j],
+            ctrl_gd_wr_addr[j]
+        } <= '0;
+        else if(write_back_finish){
+            ctrl_fm_wr_addr[j],
+            ctrl_gd_wr_addr[j]
+        } <= '0;
+        else begin
+            if(ctrl_fm_wr_en_f[j]) ctrl_fm_wr_addr[j] <= ctrl_fm_wr_addr[j] + 1;
+            if(ctrl_gd_wr_en_f[j]) ctrl_gd_wr_addr[j] <= ctrl_gd_wr_addr[j] + 1;
+        end*/
+end
+endgenerate
+
+
 // - wt/bias rd addr --------------------------------------------
 logic is_first_d;
 always_ff@(posedge clk or negedge rst_n)
@@ -423,7 +557,7 @@ always_ff@(posedge clk or negedge rst_n)
             bias_rd_addr <= '0;
             
         end else begin
-            if(one_layer_finish) bias_rd_addr <= bias_rd_addr + 1;
+            if(fm_guard_gen_ctrl_finish) bias_rd_addr <= bias_rd_addr + 1;
         end
     end
 generate

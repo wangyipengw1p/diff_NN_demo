@@ -25,19 +25,23 @@ module fm_guard_gen(
     input  logic [7:0]                          h_num,
     input  logic                                kernel_mode,
     input  logic                                bit_mode,
+    input  logic                                running,
     input  logic [7:0]                          count_w,
     input  logic [7:0]                          count_h,
     input  logic [7:0]                          count_c,
+    input  logic [7:0]                          wb_w_num_i,
+    input  logic [7:0]                          wb_h_num_i,
+    input  logic [7:0]                          wb_w_cut_i,
     input  logic                                is_diff,
     input  logic                                is_first,
-    input  logic                                is_even_row,              //distinguish odd and even lines
+    input  logic                                is_even_row,              // distinguish odd and even lines
     input  logic                                is_even_even_row,         // 0 0 1 1 0 0 1 1 0 0 ...
     input  logic [1:0]                          count_3,
     //
     input  logic                                psum_almost_valid,
     input  logic [3 * 6 * PSUM_WIDTH - 1 : 0 ]  psum_ans_i,
     //
-    input  logic [5:0][7:0]                     bias_i,
+    input  logic [7:0]                     bias_i,
     //
     output logic                                write_back_finish,
     output logic [7:0]                          write_back_data_o,   
@@ -69,7 +73,7 @@ two_port_mem #(
     .addrb      (buf_addr),
     .dina       (buf_data_in),
     .wea        (buf_wr_en_1),
-    .enb        (psum_almost_valid),
+    .enb        ('1),
     .doutb      (buf_data_out_1)
 );
 two_port_mem #(
@@ -81,7 +85,7 @@ two_port_mem #(
     .addrb      (buf_addr),
     .dina       (buf_data_in),
     .wea        (buf_wr_en_2),
-    .enb        (psum_almost_valid),
+    .enb        ('1),
     .doutb      (buf_data_out_2)
 );
 generate 
@@ -108,14 +112,14 @@ always_ff@(posedge clk or negedge rst_n)
             buf_addr
         } <= '0;
     else if (psum_valid)begin
-        if (buf_addr == (w_num - 1)) buf_addr <= 0;
+        if (count_w < (kernel_mode ? 12 : 6)) buf_addr <= 0;
         else buf_addr <= buf_addr + 1;
     end
 //  - en and din assignment -----------------------------------------------------------------------------
 always_comb begin
     buf_wr_en_1 = kernel_mode ?  ~is_even_even_row & psum_valid : ~is_even_row & psum_valid;
     buf_wr_en_2 = kernel_mode ?  is_even_even_row & psum_valid  : is_even_row & psum_valid;
-    if(kernel_mode) begin //3*3
+    if(kernel_mode) begin //5*5
         case (count_3)
             2'b00:                                                                  
                 buf_data_in = is_even_row ? ~is_even_even_row ? {buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH], add_ans_1, add_ans_2}
@@ -147,22 +151,22 @@ always_comb begin
 end
 //  - adder assignment, with corner value considered --------------------------------------------------------
 always_comb 
-if(kernel_mode)
+if(kernel_mode)//5*5
     case(count_h)
-        h_num - 1: begin
-            add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+        h_num : begin
+            add_a = psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
             add_b = '0;
             add_c = '0;
             add_d = add_ans_1;
         end
-        h_num - 2: begin
+        h_num - 1: begin
             add_a = '0;
             add_b = '0;
-            add_c = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+            add_c = psum_ans_i[6*PSUM_WIDTH - 1 : 0];
             add_d = is_even_even_row ? buf_data_out_2[6*PSUM_WIDTH - 1 : 0] : buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
         end
-        h_num - 3:begin
-            add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+        h_num - 2:begin
+            add_a = psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
             add_b = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] : buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
             add_c = '0;
             add_d = add_ans_1;
@@ -171,21 +175,21 @@ if(kernel_mode)
             if (is_even_row) //even row
                 case (count_3)
                     2'b00:begin
-                        add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                        add_a = psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
                         add_b = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH] : buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
-                        add_c = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                        add_c = psum_ans_i[6*PSUM_WIDTH - 1 : 0];
                         add_d = is_even_even_row ? buf_data_out_2[6*PSUM_WIDTH - 1 : 0] : buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
                     end
                     2'b01:begin
-                        add_a = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                        add_a = psum_ans_i[6*PSUM_WIDTH - 1 : 0];
                         add_b = is_even_even_row ? buf_data_out_2[6*PSUM_WIDTH - 1 : 0] : buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
-                        add_c = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH - 1];
+                        add_c = psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH - 1];
                         add_d = is_even_even_row ? buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH - 1] : buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH - 1];
                     end
                     2'b10:begin
-                        add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                        add_a = psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
                         add_b = is_even_even_row ? buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH] : buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
-                        add_c = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH - 1];
+                        add_c = psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH - 1];
                         add_d = is_even_even_row ? buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH - 1] : buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH - 1];
                     end
                     default:begin
@@ -199,17 +203,17 @@ if(kernel_mode)
                 add_d = add_ans_1;
                 case (count_3)
                     2'b00:begin
-                        add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                        add_a = psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
                         add_b = buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
                         add_c = buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
                     end
                     2'b01:begin
-                        add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                        add_a = psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
                         add_b = buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
                         add_c = buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
                     end
                     2'b10:begin
-                        add_a = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                        add_a = psum_ans_i[6*PSUM_WIDTH - 1 : 0];
                         add_b = buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
                         add_c = buf_data_out_2[6*PSUM_WIDTH - 1 : 0];
                     end
@@ -223,28 +227,28 @@ if(kernel_mode)
     endcase
 else begin       //3*3
     add_d = add_ans_1;
-    if(count_h == h_num - 1) begin                                  //corner value
-        add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+    if(count_h == h_num) begin                                  //corner value
+        add_a = psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
         add_b = '0;
         add_c = '0;
-    end else if (count_h == h_num - 2)begin
-        add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+    end else if (count_h == h_num - 1)begin
+        add_a = psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
         add_b = buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
         add_c = '0;
     end else
         case (count_3)
             2'b00:begin
-                add_a = buf_data_in[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
+                add_a = psum_ans_i[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
                 add_b = buf_data_out_1[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
                 add_c = buf_data_out_2[3*6*PSUM_WIDTH - 1 : 2*6*PSUM_WIDTH];
             end
             2'b01:begin
-                add_a = buf_data_in[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
+                add_a = psum_ans_i[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
                 add_b = buf_data_out_1[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
                 add_c = buf_data_out_2[2*6*PSUM_WIDTH - 1 : 6*PSUM_WIDTH];
             end
             2'b10:begin
-                add_a = buf_data_in[6*PSUM_WIDTH - 1 : 0];
+                add_a = psum_ans_i[6*PSUM_WIDTH - 1 : 0];
                 add_b = buf_data_out_1[6*PSUM_WIDTH - 1 : 0];
                 add_c = buf_data_out_2[6*PSUM_WIDTH - 1 : 0];
             end
@@ -256,50 +260,58 @@ else begin       //3*3
         endcase
 end
 // - psum buffer -----------------------------------------------------
-logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] psum_buf_wr_addr, psum_buf_rd_addr;
-(*DONT_TOUCH = "true"*)logic [5:0][PSUM_WIDTH - 1 : 0] psum_buf_data_in, psum_buf_data_out;
-logic [5:0][PSUM_WIDTH - 1 : 0] psum_add_ans, psum_add_ans_for_4_bit;
+logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] psum_buf_wr_addr, writeback_rd_addr;
+(*DONT_TOUCH = "true"*)logic [5:0][PSUM_WIDTH - 1 : 0] psum_buf_data_in, psum_buf_data_out,psum_buf_data_out_for_write_back;
+logic [5:0][PSUM_WIDTH - 1 : 0] psum_add_ans, psum_add_ans_for_4_bit, psum_add_bias_ans;
 logic psum_buf_ping_pong, psum_buf_wr_en;
 logic [5:0][PSUM_WIDTH - 1 : 0] bias_to_add;
 logic [5:0][PSUM_WIDTH - 1 : 0] after_diff;
 logic psum_buf_wr_addr_dont_increase;
-always_comb psum_buf_data_in = bit_mode ? count_c  == 0  ?  after_diff : psum_add_ans_for_4_bit : psum_add_ans;
-always_comb psum_buf_wr_en = ~psum_buf_wr_addr_dont_increase;
+always_comb psum_buf_data_in = count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) ? is_diff && bit_mode ?  after_diff : psum_add_bias_ans : psum_add_ans;//bit_mode ? count_c  == 0  ?  after_diff : psum_add_ans_for_4_bit : psum_add_ans;
+always_comb psum_buf_wr_en = ~psum_buf_wr_addr_dont_increase && psum_valid;
 ping_pong_buffer #(
     .BIT_LENGTH(6*PSUM_WIDTH),
     .DEPTH(FM_GUARD_GEN_PSUM_BUF_DEPTH)
 ) psum_buf (
     .*,
-    .addra      (psum_buf_wr_addr),
-    .addrb      (psum_buf_rd_addr),
-    .dina       (psum_buf_data_in),
-    .wea        (psum_buf_wr_en),
-    .enb        ('1),
-    .doutb      (psum_buf_data_out),
+    .addr1      (psum_buf_wr_addr),
+    .addr2      (writeback_rd_addr),
+    .din1       (psum_buf_data_in),
+    .din2       ('0),
+    .we1        (psum_buf_wr_en),
+    .we2        ('0),
+    .dout1      (psum_buf_data_out),
+    .dout2      (psum_buf_data_out_for_write_back),
     .ping_pong  (psum_buf_ping_pong)
 );
 
 generate 
     for( i = 5; i >=0; i--)begin:add_for_psum_buf
-        logic [PSUM_WIDTH - 1 : 0] tmp_add_a;
-        always_comb bias_to_add[i] = {24'd0,bias_i[i]};  //
-        always_comb tmp_add_a = count_c == 1 ? is_diff && bit_mode ?  after_diff[i] :bias_to_add[i] : add_ans_2[i];
+        logic [PSUM_WIDTH - 1 : 0] adder_psum_a;
+        always_comb adder_psum_a = bit_mode ? psum_add_ans_for_4_bit[i] : add_ans_2[i];
+        always_comb bias_to_add[i] = {24'd0,bias_i};  //
+        //always_comb tmp_add_a = count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) ? is_diff && bit_mode ?  after_diff[i] : bias_to_add[i] + add_ans_2[i] : add_ans_2[i];       //to be optimised
         adder #(
             .WIDTH(PSUM_WIDTH)
         )adder_psum(
-            .a(tmp_add_a),
+            .a(adder_psum_a),
             .b(psum_buf_data_out[i]),
             .ans(psum_add_ans[i])
         );
         adder #(
             .WIDTH(PSUM_WIDTH / 2)
         )adder_for_4_bit(
-            .a(psum_add_ans[i][PSUM_WIDTH - 1 : PSUM_WIDTH / 2]),
-            .b(psum_add_ans[i][PSUM_WIDTH / 2 - 1 : 0]),
-            .ans(psum_add_ans_for_4_bit[i][PSUM_WIDTH / 2 - 1 : 0])
+            .a(add_ans_2[i][PSUM_WIDTH - 1 : PSUM_WIDTH / 2]),
+            .b(add_ans_2[i][PSUM_WIDTH / 2 - 1 : 0]),
+            .ans(psum_add_ans_for_4_bit[i])
         );
-
-        always_comb psum_add_ans_for_4_bit[i][PSUM_WIDTH - 1 : PSUM_WIDTH / 2] = '0;
+        adder #(
+            .WIDTH(PSUM_WIDTH)
+        )add_bias(
+            .a(bias_to_add[i]),
+            .b(psum_add_ans[i]),
+            .ans(psum_add_bias_ans[i])
+        );
     end
 endgenerate
 
@@ -310,17 +322,15 @@ always_ff@(posedge clk or negedge rst_n)
             psum_buf_ping_pong
         } <= '0;
     else if (psum_buf_wr_addr_dont_increase); //do nothing
-    else begin
-        if (psum_buf_wr_addr == (w_num * h_num - 1)) psum_buf_wr_addr <= 0;                 //whether the synthesis tool will optimise this?
+    else if(psum_valid) begin
+        if (count_h == 0 && count_w < (kernel_mode ? 12 : 6)) psum_buf_wr_addr <= 0;                 //whether the synthesis tool will optimise this?
         else psum_buf_wr_addr <= psum_buf_wr_addr + 1;
-        if(count_c == 0 && count_h == 0 && count_w < 6 && bit_mode) begin
+        if(count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) && count_h == 0 && count_w < (kernel_mode ? 12 : 6) && bit_mode && running) begin
             psum_buf_ping_pong <= ~psum_buf_ping_pong;  //++ ok?
         end
     end
 always_comb 
-    if (count_c == 1) 
-        psum_buf_wr_addr_dont_increase =  0;
-    else if(kernel_mode)  //5*5
+    if(kernel_mode)  //5*5
         psum_buf_wr_addr_dont_increase =  count_h >= h_num - 4 || count_h[0] == 0 ? 1 : 0;
     else //3*3
         psum_buf_wr_addr_dont_increase = count_h >= h_num - 2 ? 1 : 0;
@@ -335,14 +345,14 @@ generate
         adder #(
             .WIDTH(PSUM_WIDTH)
         ) add_ref (
-            .a({{PSUM_WIDTH-8{ref_buf_data_out[i][7]}}, ref_buf_data_out[i]}),
-            .b(psum_buf_data_out[i]),
+            .a({{(PSUM_WIDTH-8){ref_buf_data_out[i][7]}}, ref_buf_data_out[i]}),      //sign extention
+            .b(psum_add_ans[i]),
             .ans(after_sum_with_diff[i])
         );
         //relu
         always_comb after_sum_with_diff_and_relu[i] = after_sum_with_diff[i][PSUM_WIDTH-1] == 1 ?  '0 : after_sum_with_diff[i];
-        always_comb ref_after_relu[i] = ref_buf_data_out[i][7]  ==  1 ?  '0 : {{PSUM_WIDTH-8{1'b0}}, ref_buf_data_out[i]};
-        always_comb minus_ref_after_relu[i] = ~ref_after_relu[i] + 1;
+        always_comb ref_after_relu[i] = ref_buf_data_out[i][7]  ==  1 ?  '0 : {{(PSUM_WIDTH-8){1'b0}}, ref_buf_data_out[i]};
+        always_comb minus_ref_after_relu[i] = (~ref_after_relu[i]) + 1;
         always_comb ref_buf_data_in[i] = after_sum_with_diff[i][7:0];
         adder #(
             .WIDTH(PSUM_WIDTH)
@@ -351,7 +361,6 @@ generate
             .b(minus_ref_after_relu[i]),
             .ans(after_diff[i])
         );
-
     end
 endgenerate
 
@@ -376,20 +385,24 @@ always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) {ref_buf_addr, is_first_d} <=  '0;
     else begin
         if(is_first && !is_first_d) ref_buf_addr <=  '0;
-        else if(count_c == 1 && bit_mode)ref_buf_addr <= ref_buf_addr + 1;
+        else if(count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) && bit_mode && !psum_buf_wr_addr_dont_increase && psum_valid)ref_buf_addr <= ref_buf_addr + 1;
     end
-always_comb ref_buf_wr_en = count_c == 1 && bit_mode ?  1 : 0;
+always_comb ref_buf_wr_en = count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) && bit_mode && !psum_buf_wr_addr_dont_increase && psum_valid?  1 : 0;
 // - relu_guard_write_back ----------------------------------------------------
 logic write_back_valid;                                       ///ready output
+logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0] wb_stop_addr;
 write_back inst_relu_guard_write_back(
+    .*,
     .ctrl_valid          (write_back_valid),       
     .ctrl_ready          (write_back_ready),                                                    // no connection now 
-    .ctrl_finish         (write_back_finish),    
-    .stop_addr_i         (psum_buf_wr_addr),
+    .ctrl_finish         (write_back_finish),  
+    .wb_w_num_i          (wb_w_num_i),
+    .wb_h_num_i          (wb_h_num_i),
+    .wb_w_cut_i          (wb_w_cut_i),
     //.bit_mode_i          (bit_mode),
     .is_diff_i           (is_diff),
-    .data_i              (psum_buf_data_out),   
-    .addr_o              (psum_buf_rd_addr),   
+    .data_i              (psum_buf_data_out_for_write_back),   
+    .addr_o              (writeback_rd_addr),   
     .data_o              (write_back_data_o), 
     //.fm_buf_ready        (fm_buf_ready),           
     .data_o_valid        (write_back_data_o_valid),           
@@ -400,11 +413,13 @@ write_back inst_relu_guard_write_back(
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)
         {
-            write_back_valid
+            write_back_valid,
+            wb_stop_addr
         } <= '0;
     else begin
+        wb_stop_addr <= psum_buf_wr_addr;
         write_back_valid <= 0;
-        if(count_c == 0 && count_h == 0 && count_w < 6 && psum_valid) begin
+        if(count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) && count_h == 0 && count_w < (kernel_mode ? 12 : 6) && psum_almost_valid && ((!bit_mode && !is_diff) || (bit_mode && is_diff)) && running) begin        
             write_back_valid <= 1;
         end
     end

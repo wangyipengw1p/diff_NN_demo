@@ -44,7 +44,7 @@ always_ff@(posedge clk or negedge rst_n)
     else begin
         if(end_of_row && finish)                                                // reset when start?
             tick_tock <= 0;
-        if(finish) 
+        else if(finish) 
             tick_tock <= tick_tock +  1;
     end 
 // - weight -------------------------------------------------------
@@ -141,6 +141,7 @@ always_ff@(posedge clk or negedge rst_n)
 
 always_comb begin
     pre_psum_next <= pre_psum;
+    if (state != IDLE) 
     case(weight_mode)
         E_MODE: begin
             {pre_psum_next[8-state],pre_psum_next[7-state]} <= add_ans;
@@ -201,7 +202,7 @@ fifo_sync #(
 )inst_fifo(
     .*,
     .din(fifo_din),
-    .wr_en(finish && tick_tock),
+    .wr_en(finish && (tick_tock || end_of_row)),
     .dout(fifo_dout_o),
     .rd_en(fifo_rd_en_o),
     .full(fifo_full_o),

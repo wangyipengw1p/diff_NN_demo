@@ -40,7 +40,6 @@ PE_state_t next_state;
 logic [5 : 0]                            guard_map;
 logic                                    is_odd_row;
 logic                                    kernel_mode;
-logic                                    running;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
         ctrl_ready      <= '1;
@@ -89,6 +88,7 @@ always_ff@(posedge clk or negedge rst_n)
     end
 // activation_en_o
 always_comb activation_en_o  = state == IDLE  ? 0 : fifo_full ? 0:1;
+//always_comb end_of_row = end_of_row_i;
 // - state & mode ---------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if (!rst_n) state <= IDLE;
