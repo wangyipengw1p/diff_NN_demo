@@ -58,6 +58,7 @@ logic [7 : 0 ]                                                       h_num;
 logic [7 : 0 ]                                                       c_num;
 logic [7 : 0 ]                                                       co_num;
 logic [7 : 0 ]                                                       wb_w_num;
+logic [7 : 0 ]                                                       wb_h_num;
 logic [7 : 0 ]                                                       wb_w_cut;
 logic                                                                bit_mode;             
 logic                                                                kernel_mode;
@@ -78,6 +79,7 @@ logic        [CONF_PE_ROW - 1 : 0]                                   fm_write_ba
 logic [CONF_PE_ROW - 1 : 0][5 : 0]                                   guard_o;                
 //logic        [CONF_PE_ROW - 1 : 0]                                   guard_buf_ready;        
 logic        [CONF_PE_ROW - 1 : 0]                                   guard_o_valid;
+logic        [CONF_PE_ROW - 1 : 0]                                   wb_bit_mode;
 // for fm buf
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       fm_wr_addr;
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       fm_rd_addr;
@@ -140,7 +142,8 @@ PE_matrix inst_PE_matrix(
     .write_back_data_o_valid   (fm_write_back_data_o_valid ),                 
     .guard_o                   (guard_o),             
     //.guard_buf_ready           (guard_buf_ready),             
-    .guard_o_valid             (guard_o_valid )     
+    .guard_o_valid             (guard_o_valid ) ,
+    .wb_bit_mode               (wb_bit_mode)
 ); 
 generate 
     for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_fm_guard

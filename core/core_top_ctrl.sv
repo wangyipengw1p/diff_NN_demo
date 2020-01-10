@@ -58,8 +58,10 @@ module core_top_ctrl(
     //output logic [CONF_PE_ROW - 1 : 0]                                                          fm_buf_ready,              
     input  logic [CONF_PE_ROW - 1 : 0]                                                          fm_write_back_data_o_valid,
     input  logic [CONF_PE_ROW - 1 : 0][5 : 0]                                                   guard_o,                
+    input  logic [CONF_PE_ROW - 1 : 0][5 : 0]                                                   guard_o_4,                
     //output logic [CONF_PE_ROW - 1 : 0]                                                          guard_buf_ready,        
     input  logic [CONF_PE_ROW - 1 : 0]                                                          guard_o_valid,
+    input  logic [CONF_PE_ROW - 1 : 0]                                                          wb_bit_mode,
     // load from outside core
     input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       load_fm_wr_addr,
     input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   load_fm_din,
@@ -149,7 +151,7 @@ end
 // - layer and parameters -------------------------------------------------------------
 
 // - finish logic -------------------------------------------
-always_comb in_finish_all = in_one_layer_finish && in_layer_num == 5;
+always_comb in_finish_all = in_one_layer_finish && in_layer_num == 5 && in_tick_tock;
 always_comb wb_finish_all = wb_one_layer_finish && wb_layer_num == 5;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) begin
@@ -175,8 +177,10 @@ always_ff@(posedge clk or negedge rst_n)
 
         
     end
-// hard-coded network parameters, actually could be calculated, but for easy ...
+// hard-coded network parameters, actually could be calculated, but for easy ..................................................................
 logic [7:0] wb_co_num;
+logic [$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_base_addr_4;
+logic [$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_base_addr_4;
 always_comb begin
     // bit_mode
     bit_mode = is_diff ? 1 : 0;
@@ -231,33 +235,33 @@ always_comb begin
 
     case(wb_layer_num)
         3'd1: begin
-            wb_w_num  = 8'd102;
+            wb_w_num  = 8'd17;      // 102/6
             wb_h_num  = 8'd31;
             wb_w_cut  = 8'd0;
             wb_co_num = 8'd24;
         end
         3'd2: begin
-            wb_w_num  = 8'd48;
+            wb_w_num  = 8'd8;       // 48/6
             wb_h_num  = 8'd14;
-            wb_w_cut  = 8'd6;
+            wb_w_cut  = 8'd1;
             wb_co_num = 8'd36;
         end
         3'd3: begin
-            wb_w_num  = 8'd24;
+            wb_w_num  = 8'd4;       // 24/6
             wb_h_num  = 8'd5;
             wb_w_cut  = 8'd0;
             wb_co_num = 8'd48;
         end
         3'd4: begin
-            wb_w_num  = 8'd24;
+            wb_w_num  = 8'd4;       // 24/6
             wb_h_num  = 8'd3;
             wb_w_cut  = 8'd0;
             wb_co_num = 8'd64;
         end
         3'd5: begin
-            wb_w_num  = 8'd18;
+            wb_w_num  = 8'd3;       // 18/6
             wb_h_num  = 8'd1;
-            wb_w_cut  = 8'd6;
+            wb_w_cut  = 8'd1;
             wb_co_num = 8'd64;
         end
         default: begin
@@ -408,6 +412,20 @@ logic [CONF_PE_ROW - 1 : 0][7:0]                                              no
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_wb_addr;
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_wb_addr;
 
+logic [CONF_PE_COL - 1 : 0][7 : 0]                                            fm_dout_for_wb_f;
+logic [CONF_PE_ROW - 1 : 0][5 : 0]                                            gd_dout_for_wb_f;
+
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_pointer_addr;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_pointer_addr;
+logic [CONF_PE_COL - 1 : 0]                                                   tick_tock_for_4bit_wb;
+logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_wb_addr_8;
+logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_wb_addr_4;
+logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_wb_addr_8;
+logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_wb_addr_4;
+logic [CONF_PE_ROW - 1 : 0][7 : 0]                                            fm_wb_data_row;
+logic [CONF_PE_ROW - 1 : 0][5 : 0]                                            gd_wb_data_row;
+
+
 always_comb     wb_one_layer_finish = &wr_back_finish;
 always_comb 
     if(core_ready) begin        //not run
@@ -425,6 +443,7 @@ always_comb
         gd_din      = load_gd_din;
         gd_wr_en    = load_gd_wr_en;   
     end
+// - wb_address and data assignment -------------------------------------------------------
 generate
 for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
     logic [7:0] count_co;
@@ -435,25 +454,40 @@ for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
         count_co,
         now_wb_port[i],
         wr_back_finish[i],
-        fm_wb_addr[i],
-        gd_wb_addr[i]
+        fm_wb_addr_8[i],
+        fm_wb_addr_4[i],
+        gd_wb_addr_8[i],
+        gd_wb_addr_4[i]
+        
     } <= '0;
     else begin
-        if(wb_state == START) begin
+        if (core_ready && core_valid) begin
+            {
+                fm_wb_addr_8[i], 
+                gd_wb_addr_8[i],
+                fm_wb_addr_4[i],
+                gd_wb_addr_4[i]
+             } <= '0;
+        end else if(wb_state == START || wb_state == FINISH_ONE_LAYER) begin
             count_co <= i;
             now_wb_port[i] <= CONF_PE_ROW - i - 1;
-        end else if (write_back_finish[i]) begin
-            count_co <= count_co + CONF_PE_ROW;
-            now_wb_port[i] += CONF_PE_ROW;
-        end
-
-        if(write_back_finish[i] && (count_co + CONF_PE_ROW) > wb_co_num - 1) wr_back_finish[i] <= 1;
-        if(wb_one_layer_finish) wr_back_finish[i] <= 0;
-
-        if(write_back_finish[i]){fm_wb_addr[i], gd_wb_addr[i]} <= '0;
-        else begin
-            if(fm_write_back_data_o_valid[i]) fm_wb_addr[i] <= fm_wb_addr[i] + 1;
-            if(guard_o_valid[i]) gd_wb_addr[i] <= gd_wb_addr[i] + 1;
+        end else begin
+            if (write_back_finish[i]) begin
+                count_co <= count_co + CONF_PE_ROW;
+                now_wb_port[i] += CONF_PE_ROW;
+            end
+            //wb finish
+            if(write_back_finish[i] && (count_co + CONF_PE_ROW) > wb_co_num - 1) wr_back_finish[i] <= 1;
+            if(wb_one_layer_finish) wr_back_finish[i] <= 0;
+            //addr counter
+            if(fm_write_back_data_o_valid[i]) begin
+                fm_wb_addr_8[i] <= is_diff ? wb_bit_mode[i] ? fm_wb_addr_8[i] : fm_wb_addr_8[i] + 1 : fm_wb_addr_8[i] + 1;
+                fm_wb_addr_4[i] <= is_diff ? wb_bit_mode[i] ? fm_wb_addr_4[i] + 1 : fm_wb_addr_4[i] : fm_wb_addr_4[i];
+            end
+            if(guard_o_valid[i]) begin
+                gd_wb_addr_8[i] <= is_diff ? wb_bit_mode[i] ? gd_wb_addr_8[i] : gd_wb_addr_8[i] + 1 : gd_wb_addr_8[i] + 1;
+                gd_wb_addr_4[i] <= is_diff ? wb_bit_mode[i] ? gd_wb_addr_4[i] + 1 : gd_wb_addr_4[i] : gd_wb_addr_4[i];
+            end
         end
     end
 end
@@ -477,15 +511,16 @@ for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_write_back_din_en_mux
                 begin
                     ctrl_fm_wr_en[j]     = fm_write_back_data_o_valid[i];
                     ctrl_gd_wr_en[j]     = guard_o_valid[i];
-                    ctrl_fm_din[j]       = fm_write_back_data[i];
-                    ctrl_gd_din[j]       = guard_o[i];
-                    ctrl_fm_wr_addr[j]   = fm_wb_addr[i];
-                    ctrl_gd_wr_addr[j]   = gd_wb_addr[i];
+                    ctrl_fm_din[j]       = is_diff && tick_tock_for_4bit_wb ? {fm_write_back_data[i][3:0], fm_dout_for_wb_f[3:0]} : fm_write_back_data[i];
+                    ctrl_gd_din[j]       = is_diff && tick_tock_for_4bit_wb ? guard_o[i] & gd_dout_for_wb_f[i] : guard_o[i];
+                    ctrl_fm_wr_addr[j]   = is_diff ? tick_tock_for_4bit_wb ? fm_pointer_addr[i] + fm_wb_addr_4[i] + fm_base_addr_4 : fm_pointer_addr[i] + fm_wb_addr_8[i] : fm_pointer_addr[i] + fm_wb_addr_8[i];
+                    ctrl_gd_wr_addr[j]   = is_diff ? tick_tock_for_4bit_wb ? gd_pointer_addr[i] + gd_wb_addr_4[i] + gd_base_addr_4 : gd_pointer_addr[i] + gd_wb_addr_8[i] : gd_pointer_addr[i] + gd_wb_addr_8[i];
                 end 
         end
     end
 end
 endgenerate
+
 // ------------------------------------------------------------------------------------------------------
 //
 // fm guard gen ctrl transfer the main ctrl
@@ -523,6 +558,8 @@ for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_shift_reg_and_wb_addr
         ctrl_gd_wr_en_f[j] = ctrl_gd_wr_en[j] && (cnt_wgd == 11);
         ctrl_fm_din_f[j]   = {shift_wfm, ctrl_fm_din[j]};
         ctrl_gd_din_f[j]   = {shift_wgd, ctrl_gd_din[j]};
+        fm_dout_for_wb_f[j]= fm_dout[71 - cnt_wfm * 8 -: 8];
+        gd_dout_for_wb_f[j]= gd_dout[71 - cnt_wgd * 6 -: 6];
     end
     /*/ gen writeback addr
     always_ff@(posedge clk or negedge rst_n)

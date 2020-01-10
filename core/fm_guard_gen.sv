@@ -49,7 +49,8 @@ module fm_guard_gen(
     output logic                                write_back_data_o_valid, 
     output logic [5:0]                          guard_o,       
     //output logic                                guard_buf_ready,         
-    output logic                                guard_o_valid           
+    output logic                                guard_o_valid,
+    output logic                                wb_bit_mode           
 
 );
 // - declearation -------------------------------------------------------
@@ -408,7 +409,8 @@ write_back inst_relu_guard_write_back(
     .data_o_valid        (write_back_data_o_valid),           
     .guard_o             (guard_o),       
     //.guard_buf_ready     (guard_buf_ready),               
-    .guard_o_valid       (guard_o_valid)           
+    .guard_o_valid       (guard_o_valid),
+    .wb_bit_mode         (wb_bit_mode)           
 );
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)

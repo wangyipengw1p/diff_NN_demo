@@ -57,7 +57,8 @@ module PE_matrix(
     output logic [CONF_PE_ROW - 1 : 0]                  write_back_data_o_valid,
     output logic [CONF_PE_ROW - 1 : 0][5 : 0]           guard_o,                
     //input  logic [CONF_PE_ROW - 1 : 0]                  guard_buf_ready,        
-    output logic [CONF_PE_ROW - 1 : 0]                  guard_o_valid          
+    output logic [CONF_PE_ROW - 1 : 0]                  guard_o_valid,          
+    output logic [CONF_PE_ROW - 1 : 0]                  wb_bit_mode          
 );
 genvar i, j, k;
 // - ctrl - for each column ---------------------------------------------------------------------
@@ -216,7 +217,8 @@ generate
             .write_back_data_o_valid  (write_back_data_o_valid[i]),                     
             .guard_o                  (guard_o[i]),     
             //.guard_buf_ready          (guard_buf_ready[i]),             
-            .guard_o_valid            (guard_o_valid[i])
+            .guard_o_valid            (guard_o_valid[i]),
+            .wb_bit_mode              (wb_bit_mode[i])
         );       
     end
 endgenerate

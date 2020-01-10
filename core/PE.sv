@@ -202,7 +202,7 @@ fifo_sync #(
 )inst_fifo(
     .*,
     .din(fifo_din),
-    .wr_en(finish && (tick_tock || end_of_row)),
+    .wr_en(finish && (weight_mode == E_MODE || weight_mode != E_MODE && (tick_tock || end_of_row))),
     .dout(fifo_dout_o),
     .rd_en(fifo_rd_en_o),
     .full(fifo_full_o),
