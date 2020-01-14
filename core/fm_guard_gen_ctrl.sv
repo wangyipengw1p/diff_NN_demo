@@ -57,7 +57,8 @@ always_ff@(posedge clk or negedge rst_n)
         ctrl_finish <= 0;
         if (ctrl_valid && ctrl_ready)     ctrl_ready <= 0;
         if (ctrl_finish && !ctrl_ready)   ctrl_ready <= 1;
-        if (count_w < (kernel_mode ? 12 : 6) && count_h == 0 && count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) && !ctrl_ready && count_co < CONF_PE_ROW && tick_tock && psum_almost_valid) ctrl_finish <= 1; //[co!4]
+        if (count_w < (kernel_mode ? 12 : 6) && count_h == 0 && count_c < (bit_mode ? 2*CONF_PE_COL : CONF_PE_COL) &&
+           !ctrl_ready && count_co < CONF_PE_ROW && tick_tock && psum_almost_valid) ctrl_finish <= 1; //[co!4]
     end
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)

@@ -9,7 +9,7 @@ Modify:
 
 Notes:
 1. w_num <= 250
-=========================================================*/
+=========================================================*/ 
 package diff_demo_pkg;
 // for peripheral design [need reconfirm]
 parameter CONF_INS_WIDTH        = 32;       // the same as ddr addr width
@@ -18,8 +18,10 @@ parameter CONF_AXI_DATA_WIDTH   = 32;       //
 parameter CONF_DDR_DATA_WIDTH   = 8;
 parameter CONF_DDR_ADDR_WIDTH   = 32;
 // Buffers          3154k
-parameter CONF_FM_BUF_DEPTH     = 2048;//18432;   // since the second layer is bottleneck, the fm buf drpth is (98*31*24/CONF_PE_COL) round up to the nearest 512|1152k
-parameter CONF_GUARD_BUF_DEPTH  = 256;//3072;    // (98*31*24/CONF_PE_COL/PE_PROCESS_WINDOW) round up to the nearest 512                                        |144k       
+parameter CONF_FM_BUF_DEPTH     = 4096;     //2048 * 1.5 for 4bit;//18432;   // since the second layer is bottleneck, the fm buf drpth is (98*31*24/CONF_PE_COL) round up to the nearest 512|1152k
+parameter CONF_GUARD_BUF_DEPTH  = 512;      //256 * 1.5 for 4bit;;//3072;    // (98*31*24/CONF_PE_COL/PE_PROCESS_WINDOW) round up to the nearest 512                                        |144k       
+parameter FM_4_BIT_BASE_ADDR    = 2048;
+parameter GD_4_BIT_BASE_ADDR    = 256;
 parameter CONF_WT_BUF_DEPTH     = 512;     // (3*24 + 24*36 + 36*48 + (48*64 + 64 *64) / 2) / CONF_PE_ROW / CONF_PE_COL       = 390.2                     |1600k|1.5625M
 parameter CONF_BIAS_BUF_DEPTH   = 64;      // (24 + 36 + 48 + 64 + 64) / CONF_PE_ROW = 2k                                                                  |12k
 // - fixed ---------------------------------
@@ -35,17 +37,17 @@ parameter PE_PROCESS_WINDOW = 6;
 
 // PE matrix-------------------------
 parameter CONF_PE_ROW = 4;
-parameter CONF_PE_COL = 4;
+parameter CONF_PE_COL = 4;          //temporary do not support COL > 6
 // ----------------------------------
 
 
 // PE
 //parameter CONF_PE_PROCESS_WIDTH = 6; //fixed
-parameter PSUM_WIDTH = 32;
+parameter PSUM_WIDTH = 24;
 parameter FIFO_DEPTH = 4;               //3*6*PSUM_WIDTH*FIFO_DEPTH = 2.25k per PE | 36k
 
 // fm_guard_gen                                     //per row, sum 528k
-parameter FM_GUARD_GEN_TMP_BUF_DEPTH = 32;          //18k * 2
+parameter FM_GUARD_GEN_TMP_BUF_DEPTH = 40;          //18k * 2
 parameter FM_GUARD_GEN_PSUM_BUF_DEPTH = 512;        //96k * 2
 parameter FM_GUARD_GEN_REF_BUF_DEPTH = 6144;         //!!!
 // first add 8 bit and bias, if diff then add 4 bit and do the diff

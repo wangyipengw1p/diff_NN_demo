@@ -85,6 +85,7 @@ logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                  
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       fm_rd_addr;
 logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   fm_din;
 logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   fm_dout;
+logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   fm_dout_for_4;
 //logic [CONF_PE_COL - 1 : 0]                                                          fm_rd_en;     
 logic [CONF_PE_COL - 1 : 0]                                                          fm_wr_en;     
 //logic [CONF_PE_COL - 1 : 0]                                                          fm_ping_pong;
@@ -92,6 +93,7 @@ logic [CONF_PE_COL - 1 : 0]                                                     
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    gd_rd_addr;
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    gd_wr_addr;
 logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   gd_dout;
+logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   gd_dout_for_4;
 logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   gd_din;
 //logic [CONF_PE_COL - 1 : 0]                                                          gd_rd_en;     
 logic [CONF_PE_COL - 1 : 0]                                                          gd_wr_en;     
@@ -147,7 +149,7 @@ PE_matrix inst_PE_matrix(
 ); 
 generate 
     for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_fm_guard
-        two_port_mem #(
+        semi_ture_two_port_mem #(
             .BIT_LENGTH(72),        //8*9
             .DEPTH(CONF_FM_BUF_DEPTH)
         )fm_buf(
@@ -155,11 +157,13 @@ generate
             .addra          (fm_wr_addr[j]),
             .addrb          (fm_rd_addr[j]),
             .dina           (fm_din[j]),
+            .douta          (fm_dout_for_4[j]),
             .wea            (fm_wr_en[j]),
             .enb            ('1),
+            .ena            ('1),
             .doutb          (fm_dout[j])
         );
-        two_port_mem #(
+        semi_ture_two_port_mem #(
             .BIT_LENGTH(72),        //6*12
             .DEPTH(CONF_GUARD_BUF_DEPTH)
         )guard_buf(
@@ -167,8 +171,10 @@ generate
             .addra          (gd_wr_addr[j]),
             .addrb          (gd_rd_addr[j]),
             .dina           (gd_din[j]),
+            .douta          (gd_dout_for_4[j]),
             .wea            (gd_wr_en[j]),
             .enb            ('1),
+            .ena            ('1),
             .doutb          (gd_dout[j])
         );
     end
