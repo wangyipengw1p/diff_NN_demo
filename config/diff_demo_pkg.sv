@@ -17,7 +17,14 @@ parameter CONF_AXI_ADDR_WIDTH   = 32;       // reg width of DDR, should correspo
 parameter CONF_AXI_DATA_WIDTH   = 32;       // 
 parameter CONF_DDR_DATA_WIDTH   = 8;
 parameter CONF_DDR_ADDR_WIDTH   = 32;
+parameter CTRL_REG_LENGTH       = 32;
+
+// read and write length in byte
+parameter LOAD_FM_LENGTH        = 23'd10240;
+parameter LOAD_WT_LENGTH        = 23'd10240;
+parameter SAVE_LENGTH           = 23'd10240;
 // Buffers          3154k
+parameter REF_FRAME_BUF_DEPTH   = 39600;    //
 parameter CONF_FM_BUF_DEPTH     = 4096;     //2048 * 1.5 for 4bit;//18432;   // since the second layer is bottleneck, the fm buf drpth is (98*31*24/CONF_PE_COL) round up to the nearest 512|1152k
 parameter CONF_GUARD_BUF_DEPTH  = 512;      //256 * 1.5 for 4bit;;//3072;    // (98*31*24/CONF_PE_COL/PE_PROCESS_WINDOW) round up to the nearest 512                                        |144k       
 parameter FM_4_BIT_BASE_ADDR    = 2048;

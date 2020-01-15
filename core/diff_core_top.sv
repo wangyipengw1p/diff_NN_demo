@@ -21,16 +21,18 @@ module diff_core_top(
     output logic                                                                                core_ready,
     input  logic                                                                                core_valid,
     output logic                                                                                core_finish,
-    input  logic                                                                                core_bit_mode_i,
+    //input  logic                                                                                core_bit_mode_i,
     //input  logic                                                                                core_fm_ping_pong_i,
     input  logic                                                                                core_is_diff_i,
     //
     input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       load_fm_wr_addr,
-    input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   load_fm_din,
-    input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en,         
+    input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                  load_fm_din,
+    input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en,   
+    input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       save_fm_rd_addr,
+    output logic [CONF_PE_COL - 1 : 0][71 : 0]                                                  save_fm_dout,      
     //input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_ping_pong,
     input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    load_gd_wr_addr,
-    input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   load_gd_din,
+    input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                  load_gd_din,
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en,         
     //input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_ping_pong,
     //
@@ -38,7 +40,7 @@ module diff_core_top(
     input  logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][25*8 - 1 : 0]                       load_wt_din,
     input  logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                     load_wt_wr_en,         
     input  logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                     load_bias_wr_addr,
-    input  logic [CONF_PE_ROW - 1 : 0][5 : 0][7 : 0]                                            load_bias_din,
+    input  logic [CONF_PE_ROW - 1 : 0][7 : 0]                                                   load_bias_din,
     input  logic [CONF_PE_ROW - 1 : 0]                                                          load_bias_wr_en         
 
 );
@@ -104,7 +106,7 @@ logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0][25*8 - 1 : 0]                  
 //logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                    wt_rd_en;         //rd_en for energy save
 // for bias buf
 logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                    bias_rd_addr;
-logic [CONF_PE_ROW - 1 : 0][7 : 0]                                           bias_dout;
+logic [CONF_PE_ROW - 1 : 0][7 : 0]                                                  bias_dout;
 //logic [CONF_PE_ROW - 1 : 0]                                                         bias_rd_en;         //rd_en for energy save
 
 // - instanciation ---------------------------------------------------------------------------------------------------

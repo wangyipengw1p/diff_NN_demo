@@ -198,7 +198,7 @@ endgenerate
 fifo_sync #(
     .DATA_WIDE(3*6*PSUM_WIDTH),
     .FIFO_DEPT(FIFO_DEPTH),
-    .MODE("distribute")
+    .MODE("block")
 )inst_fifo(
     .*,
     .din(fifo_din),

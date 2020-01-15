@@ -66,6 +66,9 @@ module core_top_ctrl(
     input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   load_fm_din,
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_wr_en,         //rd_en for energy save
     //input  logic [CONF_PE_COL - 1 : 0]                                                          load_fm_ping_pong,
+    input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       save_fm_rd_addr,
+    output logic [CONF_PE_COL - 1 : 0][71 : 0]                                                  save_fm_dout, 
+
     input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    load_gd_wr_addr,
     input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                   load_gd_din,
     input  logic [CONF_PE_COL - 1 : 0]                                                          load_gd_wr_en,         //rd_en for energy save
@@ -94,12 +97,13 @@ module core_top_ctrl(
     //output logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0]                                     wt_rd_en,          
     // for bias buf 
     output logic [CONF_PE_ROW - 1 : 0][$clog2(CONF_BIAS_BUF_DEPTH) - 1 : 0]                     bias_rd_addr,
-    input  logic [CONF_PE_ROW - 1 : 0][7 : 0]                                            bias_dout
+    input  logic [CONF_PE_ROW - 1 : 0][7 : 0]                                                   bias_dout
     //output logic [CONF_PE_ROW - 1 : 0]                                                          bias_rd_en          
 );
 genvar i, j;
+logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       in_fm_rd_addr;
+always_comb save_fm_dout = core_ready ? fm_dout : '0;
 // - ctrl protcol -----------------------------------------------------
-//logic core_fm_ping_pong;
 logic in_one_layer_finish, wb_one_layer_finish, wb_one_layer_finish_d, in_finish_all, wb_finish_all;
 logic wb_tick_tock, in_tick_tock;                    // for diff
 logic [2:0] in_layer_num, wb_layer_num;
@@ -130,7 +134,7 @@ enum logic [2:0] {IDLE, START, PROCESS, FINISH_ONE_LAYER, FINISH} in_state, next
 
 
 always_ff@(posedge clk or negedge rst_n)
-    if(!rst_n) {in_state, wb_state} <= IDLE;
+    if(!rst_n) {in_state, wb_state} <= {IDLE, IDLE};
     else begin
         in_state <= next_in_state;
         wb_state <= next_wb_state;
@@ -139,10 +143,11 @@ always_ff@(posedge clk or negedge rst_n)
 always_comb begin
     case(in_state)
         IDLE:               next_in_state = core_ready && core_valid ? START : IDLE;
-        START:              next_in_state = in_layer_num - wb_layer_num <= 2 ? PROCESS : START;
+        START:              next_in_state = in_layer_num - wb_layer_num <= 2 ? PROCESS : START;         // in case that wb is too slow, temp useless
         PROCESS:            next_in_state = in_finish_all ? FINISH : in_one_layer_finish ? FINISH_ONE_LAYER  : PROCESS;
         FINISH_ONE_LAYER:   next_in_state = START;
         FINISH:             next_in_state = IDLE;
+        default:            next_in_state = IDLE;
     endcase
     case(wb_state)
         IDLE:               next_wb_state = core_ready && core_valid ? START : IDLE;
@@ -150,19 +155,20 @@ always_comb begin
         PROCESS:            next_wb_state = wb_finish_all ? FINISH : wb_one_layer_finish ? FINISH_ONE_LAYER  : PROCESS;
         FINISH_ONE_LAYER:   next_wb_state = START;
         FINISH:             next_wb_state = IDLE;
+        default:            next_wb_state = IDLE;
     endcase
 end
 // - layer and parameters -------------------------------------------------------------
 
-// - finish logic -------------------------------------------
+// - finish logic -
 always_comb in_finish_all = in_one_layer_finish && in_layer_num == 5 && in_tick_tock;
-always_comb wb_finish_all = wb_one_layer_finish && wb_layer_num == 5;
+always_comb wb_finish_all = wb_one_layer_finish && wb_layer_num == 5;                   //wb tick tock is controled by wb module
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) begin
     {
         in_layer_num,
         wb_layer_num,
-        wb_tick_tock,
+        wb_tick_tock,               // not used by now
         in_tick_tock
     } <= '0;
     end else begin
@@ -178,13 +184,11 @@ always_ff@(posedge clk or negedge rst_n)
             if(wb_one_layer_finish && is_diff) wb_tick_tock <= ~wb_tick_tock;
             if(in_one_layer_finish && is_diff) in_tick_tock <= ~in_tick_tock;
         end
-
-        
     end
 // hard-coded network parameters, actually could be calculated, but for easy ..................................................................
 logic [7:0] wb_co_num;
 always_comb begin
-    // bit_mode
+    // bit_mode     `
     bit_mode = is_diff ? 1 : 0;
     is_first = 0;                           // will be high for the first layer
     in_bit_mode = is_diff ? in_tick_tock : 0;
@@ -290,17 +294,36 @@ logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                  
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       fm_rd_addr_8_pp, fm_rd_addr_4_pp;          // pp: park pointer
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    gd_rd_addr_8, gd_rd_addr_4;
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]                    gd_rd_addr_8_pp, gd_rd_addr_4_pp;
+logic [CONF_PE_COL - 1 : 0]                                                          fin_a_input_channel;
 
-
+// wait for all cols to finish input
 always_comb in_one_layer_finish = &in_layer_finish_col;
-//
-//always_comb fm_guard_gen_ctrl_valid = (wb_state == START || wb_state == PROCESS) && ((!in_bit_mode && !is_diff) || (in_bit_mode && is_diff));      //?
+
+//* always_comb fm_guard_gen_ctrl_valid = (wb_state == START || wb_state == PROCESS) && ((!in_bit_mode && !is_diff) || (in_bit_mode && is_diff));      //?
+
+//when starting input a new layer, this valid signal becomes high. indicating OK to accept new acc values in fm guard gen modules
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)fm_guard_gen_ctrl_valid <= '0;
     else begin
         if(in_state == START && in_tick_tock == (is_diff ? '0 : '1)) fm_guard_gen_ctrl_valid <= '1;
         if(fm_guard_gen_ctrl_valid && fm_guard_gen_ctrl_ready) fm_guard_gen_ctrl_valid <= '0;
     end 
+
+// - MAIN matrix input logics ------------------------------------------------------------------------------------------- [in matrix]
+/*
+ ----------------
+ | park pointer |
+ ----------------
+The same sets of input layer of fm will be input into matrix for different ci,
+so after in_one_ci_finish, scene(cnt, addr...) should be recovered to park point.
+Only after in_one_co_finish shoud the scene be increased.
+ --------------------------
+ | Why cnt and shift reg? |
+ --------------------------
+BRAM in XLINX board is tipically 72*512(36k), in order to save BRAM, bank width
+of fm and gd is fixed to 72, while using cnt and shift reg for input and wb.
+Indeed more tricky logic has been used.
+*/
 generate
 for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
     //counters
@@ -311,10 +334,20 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
     logic [3:0] cnt_fm_4_pp, cnt_gd_4_pp;
     logic in_one_ci_finish, in_one_co_finish;
 
-    //always_comb in_one_ci_finish = (in_state == PROCESS) && PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && count_h == 0 && count_w < 6;
+    //* always_comb in_one_ci_finish = (in_state == PROCESS) && PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && count_h == 0 && count_w < 6;
+
+    // in_one_ci_finish: this col finishes input for a input channel
+    // in_one_co_finish: this col finishes input for an output channel
     always_comb in_one_ci_finish = (in_state == PROCESS) && PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && count_h == 0 && count_w < 6 &&
                                    (in_bit_mode && (count_ci + 2*CONF_PE_COL > c_num - 1) || !in_bit_mode && (count_ci + CONF_PE_COL > c_num - 1));
     always_comb in_one_co_finish = (in_state != IDLE) && count_co == co_num && !in_layer_finish_col[j];
+    //if ci_num is not a multiple of COL_NUM, some cols should be gated when finishing a input channel
+    always_ff@(posedge clk or negedge rst_n)
+    if(!rst_n) fin_a_input_channel[j] <= '0; 
+    else begin 
+        if(in_one_ci_finish) fin_a_input_channel[j] <= '1; 
+        if (&fin_a_input_channel) fin_a_input_channel[j] <= '0; 
+    end
     //special counter for input
     always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) {
@@ -330,7 +363,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         cnt_fm_8_pp, cnt_gd_8_pp,
         cnt_fm_4_pp, cnt_gd_4_pp
     } <= '0;
-    end else if(in_one_ci_finish && !in_one_co_finish) begin
+    end else if(in_one_ci_finish && !in_one_co_finish) begin            // recover scene
         cnt_fm_8 <= cnt_fm_8_pp;
         cnt_gd_8 <= cnt_gd_8_pp;
         cnt_fm_4 <= cnt_fm_4_pp;
@@ -379,12 +412,12 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         end
     end
     // counter for data managment
-    // input finish one layer signal for a collum 
+    
     always_ff@(posedge clk or negedge rst_n)
         if(!rst_n) begin
         {
             count_w, count_h, count_ci, count_co,
-            in_layer_finish_col[j],
+            in_layer_finish_col[j],                 // input finish one layer signal for a collum 
             in_gate_col[j]
         } <= '0;
         is_odd_row[j] <= 1;
@@ -394,7 +427,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
                 count_h  <= h_num - 1;
                 count_ci <= j;
                 count_co <= 0;
-                if(j > c_num - 1) in_gate_col[j] <= 1;                  //special: if COL NUM > ci num, there will be a rol in IDLE (to be optimised for power)
+                if(j > (in_bit_mode ? (c_num >> 1) : c_num - 1)) in_gate_col[j] <= 1;                  //special: if COL NUM > ci num, there will be a rol in IDLE (to be optimised for power)
                 else in_gate_col[j] <= 0;
             end else if((in_state == PROCESS) && PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j]) begin
                 if (count_h == 0 && count_w < 6)begin
@@ -417,6 +450,9 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
                 in_layer_finish_col[j] <= 1;
             if(in_one_layer_finish) in_layer_finish_col[j] <= 0;
 
+            // 
+            if(fin_a_input_channel[j] && (~&fin_a_input_channel)) in_gate_col[j] <= 1;
+            else in_gate_col[j] <= 0;
         end
 
     //addr magagement
@@ -466,7 +502,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         end
     
     always_comb begin
-        fm_rd_addr[j] = in_bit_mode ? fm_rd_addr_4[j] : fm_rd_addr_8[j];
+        in_fm_rd_addr[j] = in_bit_mode ? fm_rd_addr_4[j] : fm_rd_addr_8[j];
         gd_rd_addr[j] = in_bit_mode ? gd_rd_addr_4[j] : gd_rd_addr_8[j];
     end
     // input data management (shift reg for fm and gd)
@@ -491,10 +527,13 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
 
 end
 endgenerate
-// - out PE matrix, fm and gd write signals, finish logic -------------------------------------------------
+// - out PE matrix, write back, fm and gd write signals, finish logic -------------------------------------------------
+
+// signals for col head, connected with write back modules via MUX
+// for reconfigurablity of COL_NUM and ROW_NUM
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                col_fm_wr_addr;
 logic [CONF_PE_COL - 1 : 0][7 : 0]                                            col_fm_din;
-logic [CONF_PE_COL - 1 : 0][71 : 0]                                           col_fm_din_f;        //shift reg for write back
+logic [CONF_PE_COL - 1 : 0][71 : 0]                                           col_fm_din_f;        
 logic [CONF_PE_COL - 1 : 0]                                                   col_fm_wr_en;      
 logic [CONF_PE_COL - 1 : 0]                                                   col_fm_wr_en_f;      
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             col_gd_wr_addr;
@@ -506,14 +545,16 @@ logic [CONF_PE_COL - 1 : 0]                                                   co
 logic [CONF_PE_COL - 1 : 0]                                                   col_co_tick_tock;      
 logic [CONF_PE_COL - 1 : 0]                                                   col_write_back_finish;      
 
-logic [CONF_PE_ROW - 1 : 0]                                                   wr_back_finish; //all row finish, then one layer finish
-logic [CONF_PE_ROW - 1 : 0][7 : 0]                                            now_wb_port;
+logic [CONF_PE_ROW - 1 : 0]                                                   row_wb_finish; // all row finish, then one layer finish
+logic [CONF_PE_ROW - 1 : 0][7 : 0]                                            now_wb_port;    // used to control MUX
 
 //logic [CONF_PE_COL - 1 : 0][7 : 0]                                            fm_dout_for_wb_f;
 //logic [CONF_PE_ROW - 1 : 0][5 : 0]                                            gd_dout_for_wb_f;
 
-logic [CONF_PE_COL - 1 : 0]                                                   tick_tock_for_4bit_wb;
+logic [CONF_PE_COL - 1 : 0]                                                   tick_tock_for_4bit_wb; // consecutive 2 input channels in 4bit mode are merged in one byte
 
+//for 4bit mode, in order to merge 2 input channels (thus wb twice), pp is needed.
+// And semi-true dule port, "No change" mdoe mem for fm and gd is needed 
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_wb_addr_8;
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_wb_addr_4;
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                fm_wb_addr_4_pp;
@@ -521,11 +562,11 @@ logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_wb_addr_4;
 logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd_wb_addr_4_pp;
 
-
-always_comb     wb_one_layer_finish = &wr_back_finish;
+// MUX for demo top
 always_comb 
     if(core_ready) begin        //not run
         fm_wr_addr  = col_fm_wr_addr;
+        fm_rd_addr  = in_fm_rd_addr;
         fm_din      = col_fm_din_f;
         fm_wr_en    = col_fm_wr_en_f;
         gd_wr_addr  = col_gd_wr_addr;
@@ -533,6 +574,7 @@ always_comb
         gd_wr_en    = col_gd_wr_en_f;
     end else begin
         fm_wr_addr  = load_fm_wr_addr;
+        fm_rd_addr  = save_fm_rd_addr;
         fm_din      = load_fm_din;
         fm_wr_en    = load_fm_wr_en;   
         gd_wr_addr  = load_gd_wr_addr;
@@ -540,6 +582,8 @@ always_comb
         gd_wr_en    = load_gd_wr_en;   
     end
 // - wb_address and data assignment -------------------------------------------------------
+always_comb     wb_one_layer_finish = &row_wb_finish;
+
 generate
 for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
     logic [7:0] count_co;
@@ -549,7 +593,7 @@ for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
     if(!rst_n) {
         count_co,
         now_wb_port[i],
-        wr_back_finish[i],
+        row_wb_finish[i],
         tick_tock_for_4bit_wb[i]
     } <= '0;
     else begin
@@ -557,17 +601,17 @@ for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
             tick_tock_for_4bit_wb[i] <= '0;
         else if(wb_state == START || wb_state == FINISH_ONE_LAYER) begin
             count_co <= i;
-            now_wb_port[i] <= CONF_PE_ROW - i - 1;
+            now_wb_port[i] <= i;
         end else begin
             if (write_back_finish[i]) begin
                 count_co <= count_co + CONF_PE_ROW;
-                now_wb_port[i] += CONF_PE_ROW;
-                tick_tock_for_4bit_wb[i] <= ~tick_tock_for_4bit_wb[i];
+                now_wb_port[i] <= now_wb_port[i] + CONF_PE_ROW >= CONF_PE_COL ? now_wb_port[i] + CONF_PE_ROW - CONF_PE_COL : now_wb_port[i] + CONF_PE_ROW;
+                if(bit_mode)tick_tock_for_4bit_wb[i] <= ~tick_tock_for_4bit_wb[i];
             end
             //wb finish
-            if(write_back_finish[i] && (count_co + CONF_PE_ROW) > wb_co_num - 1) wr_back_finish[i] <= 1;
+            if(write_back_finish[i] && (count_co + CONF_PE_ROW) > wb_co_num - 1) row_wb_finish[i] <= 1;
             if(wb_one_layer_finish) begin 
-                wr_back_finish[i] <= 0;
+                row_wb_finish[i] <= 0;
                 tick_tock_for_4bit_wb[i] <= '0;
             end
             /*/addr counter
@@ -716,16 +760,16 @@ for(j = CONF_PE_COL - 1; j >= 0; j--) begin:gen_shift_reg_and_wb_addr
         end
     end else begin
         if(col_fm_wr_en[j] && cnt_wfm_8 == 8 && is_diff && !col_wb_bit_mode[j] || col_fm_wr_en[j] && cnt_wfm_8 == 8 && !is_diff) 
-            fm_wb_addr_8[j]++;
+            fm_wb_addr_8[j] <= fm_wb_addr_8[j] + 1;
 
         if(col_gd_wr_en[j] && cnt_wgd_8 == 11 && is_diff && !col_wb_bit_mode[j] || col_gd_wr_en[j] && cnt_wgd_8 == 11 && !is_diff) 
-            gd_wb_addr_8[j]++;
+            gd_wb_addr_8[j] <= gd_wb_addr_8[j] + 1;
 
         if(col_fm_wr_en[j] && cnt_wfm_4 == 8 && is_diff && col_wb_bit_mode[j]) 
-            fm_wb_addr_4[j]++;
+            fm_wb_addr_4[j] <= fm_wb_addr_4[j] + 1;
 
         if(col_gd_wr_en[j] && cnt_wgd_4 == 11 && is_diff && col_wb_bit_mode[j]) 
-            gd_wb_addr_4[j]++;
+            gd_wb_addr_4[j] <= gd_wb_addr_4[j] + 1;
         //pp
         if(is_diff && col_write_back_finish[j] && !col_co_tick_tock[j])begin
             fm_wb_addr_4[j] <= fm_wb_addr_4_pp[j];
@@ -797,23 +841,31 @@ always_ff@(posedge clk or negedge rst_n)
             bias_rd_addr <= '0;
             
         end else begin
-            if(fm_guard_gen_ctrl_finish) bias_rd_addr <= bias_rd_addr + 1;
+            if(fm_guard_gen_ctrl_finish) bias_rd_addr <= bias_rd_addr + 1;              // change for every output channel  [check]
         end
     end
+
 generate
 for(i = CONF_PE_ROW - 1; i >= 0; i--) begin:gen_wt_addr
     for(j = CONF_PE_COL - 1; j >= 0; j--)begin:gen_wt_addr_col
+        logic wt_tick_tock;                                 // for two 3*3 kernel are stroed in one data line
+
         always_ff@(posedge clk or negedge rst_n)
-        if(!rst_n) wt_rd_addr[i][j] <= '0;
+        if(!rst_n) {
+            wt_rd_addr[i][j], 
+            wt_tick_tock
+        } <= '0;
         else if(is_first && !is_first_d) wt_rd_addr[i][j] <='0;
-        else if(fm_gd_in[j].count_h == 1 && fm_gd_in[j].count_w == 1) wt_rd_addr[i][j] <= wt_rd_addr[i][j] + 1;
+        else if(fm_gd_in[j].count_h == 0 && fm_gd_in[j].count_w < 6) begin
+            if(kernel_mode || !kernel_mode && wt_tick_tock) wt_rd_addr[i][j] <= wt_rd_addr[i][j] + 1;
+            if(kernel_mode == 0) wt_tick_tock <= ~wt_tick_tock;
+        end
+        // weight out
+        always_comb weight[i][j] = !kernel_mode && wt_tick_tock ? wt_dout[i][j] << (9*8) : wt_dout[i][j];
     end
 end
 endgenerate
-// - out --------------------------------------------------------
-//always_comb activation = fm_dout;
-always_comb weight = wt_dout;
-//always_comb guard_map = gd_dout;
+// - bias out -
 always_comb bias = bias_dout;
 
 endmodule

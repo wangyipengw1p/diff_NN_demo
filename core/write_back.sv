@@ -11,7 +11,7 @@ Notes:
 1. 
 
 TODO:
-critical path here
+critical path here maybe
 =========================================================*/
 import diff_demo_pkg::*;
 module write_back(
@@ -25,7 +25,7 @@ module write_back(
     input  logic [7:0]                                          wb_w_cut_i,
     input  logic                                                is_diff_i,
     //                      
-    input  logic [5:0][PSUM_WIDTH - 1 : 0]                      data_i,
+    input  logic [5:0][PSUM_WIDTH - 1 : 0]                      data_i,         // will be trucated
     output logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0]  addr_o,
     //output logic                                                rd_en,
     //
@@ -51,7 +51,7 @@ typedef enum logic[2:0] {
 
 state_t state, next_state;
 logic [5:0] guard_map_8, guard_map_4, guard_map_4_8, guard_o_r;
-logic [5:0][7:0] data_reg;
+//logic [5:0][7:0] data_reg;
 logic almost_finish;
 logic is_diff;
 logic [7:0] wb_w_num;
@@ -176,11 +176,12 @@ generate
             guard_map_4[i] = state == START ? data_i[i][7 : 0] == 0 ? 0: data_i[i][7 : 4] ==  0  ?  1 : 0: 0;                       // not used here        [4bit]
             guard_map_8[i] = state == START ? data_i[i][7 : 0] == 0 ? 0: data_i[i][7 : 4] !=  0  ?  1 : 0: 0;
         end
+        /*
         always_ff@(posedge clk or negedge rst_n)
             if (!rst_n) 
                 data_reg[i] <= '0;
             else if (state == START) 
-                data_reg[i] <= data_i[i][7:0];
+                data_reg[i] <= data_i[i][7:0];*/
     end
 endgenerate
 
