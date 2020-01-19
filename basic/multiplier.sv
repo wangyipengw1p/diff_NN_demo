@@ -15,38 +15,55 @@ Notes:
 import diff_demo_pkg::*;
 module multiplier(
     input  logic        mode,     //0: normal 8-bit  1: 2-4bit
+    input  logic        is_first,
     input  logic [7:0]  a,
     input  logic [7:0]  b,
     output logic [PSUM_WIDTH - 1 : 0] ans
 );
-logic [PSUM_WIDTH/2 - 1 : 0] ans1, ans2;
 
-generate 
-if (PSUM_WIDTH > 25)begin: set_zero
-    always_comb ans1[PSUM_WIDTH/2 - 1 : 12] = '0;
-    always_comb ans2[PSUM_WIDTH/2 - 1 : 12] = '0;
-end
-endgenerate
+
+logic signed [PSUM_WIDTH/2 - 1 : 0] ans1, ans2;
+logic signed [PSUM_WIDTH - 1 : 0] tmp_ans, tmp_ans1;
+logic [7:0] u_a;
+always_comb begin
+    u_a = !is_first && !mode ? a[7] ? ~a + 1 : a : a;
+    tmp_ans = (ans1 << 4) + ans2;
+    tmp_ans1 = a[7] ? ~tmp_ans + 1 : tmp_ans;
+    if(is_first)begin        
+        ans = mode ? {ans1, ans2} : tmp_ans;
+    end else begin
+        ans = mode ? {ans1, ans2} : tmp_ans1;
+    end
+end 
+
 
 mul mul1(
-    .a   (a[7:4]),
+    .a   (u_a[7:4]),
     .b   (b),
-    .ans (ans1[11:0])
+    .a_unsigned (is_first),
+    .ans (ans1)
 );
 mul mul2(
-    .a   (a[3:0]),
+    .a   (u_a[3:0]),
     .b   (b),
-    .ans (ans2[11:0])
+    .a_unsigned (is_first),
+    .ans (ans2)
 );
-
-always_comb ans = mode ? {ans1, ans2} : (ans1 << 4) + ans2;
 endmodule
 
 // - std 4bit*8bit multiplier --------------------------------------------
 module mul(
     input  logic [3:0]  a,
     input  logic [7:0]  b,
-    output logic [11:0] ans 
+    input  logic        a_unsigned,
+    output logic signed [11:0] ans 
 );
-always_comb ans = a * b;
+logic [7:0] u_b;
+logic [3:0] u_a;
+always_comb begin
+    u_b = b[7] ? ~b + 1: b;
+    u_a = a_unsigned ? a : a[3] ? ~a + 1 : a;
+    ans = (a_unsigned ? b[7] : a[3] ^ b[7]) ?  $signed(~(u_a * u_b) + 1) : $signed(u_a * u_b);
+end
+
 endmodule

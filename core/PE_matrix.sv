@@ -33,14 +33,17 @@ module PE_matrix(
     input  logic [7 : 0 ]                               h_num_i,
     input  logic [7 : 0 ]                               c_num_i,
     input  logic [7 : 0 ]                               co_num_i,
+    input  logic [3 : 0 ]                               shift_bias_i,
+    input  logic [3 : 0 ]                               shift_wb_i,
     input  logic [7 : 0 ]                               wb_w_num_i,
     input  logic [7 : 0 ]                               wb_h_num_i,
     input  logic [7 : 0 ]                               wb_w_cut_i,
-    input  logic                                        bit_mode_i,             //0: normal 8-bit  1: 2-4bit, no reg
     input  logic                                        kernel_mode_i,   
-    input  logic                                        in_bit_mode_i,             //0: normal 8-bit  1: 2-4bit, no reg
+    input  logic [CONF_PE_COL - 1 : 0]                  in_bit_mode_i,             //0: normal 8-bit  1: 2-4bit, no reg
     input  logic                                        is_diff_i,
+    input  logic                                        frm_is_ref_i,
     input  logic                                        is_first_i,
+    input  logic                                        is_last_i,
     input  logic [CONF_PE_COL - 1 : 0]                  is_odd_row_i,
     input  logic [CONF_PE_COL - 1 : 0]                  end_of_row_i, 
     //
@@ -64,11 +67,12 @@ genvar i, j, k;
 // - ctrl - for each column ---------------------------------------------------------------------
 // the following generate if for a column
 logic [CONF_PE_COL - 1 : 0] connect_PE_col_ctrl_finish;
-(*DONT_TOUCH = "true"*)PE_state_t                  connect_state       [CONF_PE_COL - 1 : 0];
-(*DONT_TOUCH = "true"*)PE_weight_mode_t            connect_weight_mode [CONF_PE_COL - 1 : 0];
+PE_state_t                  connect_state       [CONF_PE_COL - 1 : 0];
+PE_weight_mode_t            connect_weight_mode [CONF_PE_COL - 1 : 0];
 logic [CONF_PE_COL - 1 : 0] connect_end_of_row;
 logic [CONF_PE_COL - 1 : 0] connect_bit_mode;
 logic [CONF_PE_ROW - 1 : 0][CONF_PE_COL - 1 : 0] fifo_full;
+logic [3:0] connect_shift_bias;
 always_comb PE_col_ctrl_finish = connect_PE_col_ctrl_finish;
 generate
     for(j = CONF_PE_COL - 1; j >= 0; j--)begin:inst_col_ctrl
@@ -77,7 +81,7 @@ generate
         .ctrl_valid        (PE_col_ctrl_valid[j]),
         .ctrl_ready        (PE_col_ctrl_ready[j]),
         .ctrl_finish       (connect_PE_col_ctrl_finish[j]),
-        .bit_mode_i        (in_bit_mode_i),        
+        .bit_mode_i        (in_bit_mode_i[j]),        
         .kernel_mode_i     (kernel_mode_i),        
         .guard_map_i       (guard_map_i  [j]),        
         .is_odd_row_i      (is_odd_row_i [j]),        
@@ -111,6 +115,7 @@ generate
                 .finish         (connect_PE_col_ctrl_finish[j]),
                 .end_of_row     (connect_end_of_row[j]),
                 .weight_i       (weight_i[i][j]), 
+                .is_first       (is_first_i),
                 .activation_i   (activation_i[j]),
                 .bit_mode       (connect_bit_mode[j]),
                 .fifo_rd_en_o   (psum_almost_valid[i]),
@@ -166,8 +171,8 @@ fm_guard_gen_ctrl inst_fm_guard_gen_ctrl(
     .h_num_i          (h_num_i),
     .c_num_i          (c_num_i),
     .co_num_i         (co_num_i),
+    .shift_bias_i     (shift_bias_i),
     .kernel_mode_i    (kernel_mode_i),
-    .bit_mode_i       (bit_mode_i),
     .is_diff_i        (is_diff_i),
     .is_first_i       (is_first_i),
     .psum_almost_valid(psum_almost_valid[CONF_PE_ROW - 1]),
@@ -175,6 +180,7 @@ fm_guard_gen_ctrl inst_fm_guard_gen_ctrl(
     .w_num            (connect_w_num),
     .h_num            (connect_h_num),
     .c_num            (connect_c_num),
+    .shift_bias       (connect_shift_bias),
     .is_diff          (connect_is_diff),
     .is_first         (connect_is_first),
     .kernel_mode      (connect_kernel_mode),
@@ -202,11 +208,15 @@ generate
             .count_c                  (connect_count_c),     
             .wb_w_num_i               (wb_w_num_i),     
             .wb_h_num_i               (wb_h_num_i),     
-            .wb_w_cut_i               (wb_w_cut_i),     
+            .wb_w_cut_i               (wb_w_cut_i),   
+            .shift_bias               (connect_shift_bias),  
+            .shift_wb                 (shift_wb_i),
             .is_even_row              (connect_is_even_row),                     
             .is_even_even_row         (connect_is_even_even_row),
             .is_diff                  (connect_is_diff),
+            .frm_is_ref               (frm_is_ref_i),
             .is_first                 (connect_is_first),             
+            .is_last                  (is_last_i),             
             .count_3                  (connect_count_3),     
             .psum_almost_valid        (psum_almost_valid[i]),             
             .psum_ans_i               (psum_ans[i]),     

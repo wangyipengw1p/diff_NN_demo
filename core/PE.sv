@@ -19,7 +19,8 @@ module PE (
     //
     input  PE_state_t                               state,
     input  PE_weight_mode_t                         weight_mode,
-    input logic                                     finish,         //finish signal by col ctrl
+    input  logic                                    finish,         //finish signal by col ctrl
+    input  logic                                    is_first,       // activation of first layer needs sign extention    
     input  logic                                    end_of_row,
     input  logic [25 * 8 - 1 : 0]                   weight_i,
     //
@@ -34,7 +35,7 @@ module PE (
 );
 genvar i, j;
 // - general ----------------------------------------------
-logic [7 : 0][2 : 0][PSUM_WIDTH - 1 : 0] pre_psum, pre_psum_next;
+logic signed [7 : 0][2 : 0][PSUM_WIDTH - 1 : 0] pre_psum, pre_psum_next;
 
 // special for 5*5 kernel
 logic tick_tock;            // even or odd row
@@ -53,18 +54,17 @@ always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) weight <= 0;
     else weight <= weight_i;
 // - 9 muls--------------------------------------------------------
-logic [8 : 0][7: 0] mul_b;  //for easy coding
+logic signed [8 : 0][7: 0] mul_b;  //for easy coding
 logic [8 : 0][PSUM_WIDTH-1: 0] mul_ans;//for easy coding
-logic [8 : 0][PSUM_WIDTH-1: 0] mul_ans_conv;//for bit length conversion
 generate
     for(i = 8; i >=0; i--) begin:mul
         multiplier inst_mul(
             .mode(bit_mode),
+            .is_first(is_first),
             .a(activation_i),
             .b(mul_b[i]),
             .ans(mul_ans[i])
         );
-        always_comb mul_ans_conv[i] = {{PSUM_WIDTH-16{mul_ans[i][15]}},mul_ans[i]};     //sign extenssion
     end
 endgenerate
 //mul assignment: considered balance and energy save
@@ -75,16 +75,12 @@ always_comb begin
             mul_b = weight.A_9;
         B_MODE:begin
             mul_b[8:3] = weight.B_6;
-            mul_b[2:0] = weight.A_9[2:0];   //hold, for energy save
         end
         C_MODE:begin
-            mul_b[8:6] = weight.B_6[5:3];   //hold
             mul_b[5:0] = weight.C_6;
         end
         D_MODE:begin
             {mul_b[8:7],mul_b[1:0]} =  weight.D_4;
-            mul_b[6] = weight.B_6[3];       //hold
-            mul_b[5:2] = weight.C_6[5:2];    //hold
         end
     endcase
 end
@@ -100,7 +96,8 @@ generate
         )an_adder(
             .a(add_a[i]),
             .b(add_b[i]),
-            .ans(add_ans[i])
+            .ans(add_ans[i]),
+            .bit_mode(bit_mode)
         );
     end
 endgenerate
@@ -111,19 +108,19 @@ always_comb begin
     case(weight_mode)
         E_MODE:begin
             if(state != IDLE) add_a = {pre_psum[8-state], pre_psum[7-state]};
-            add_b = mul_ans_conv[8:3];
+            add_b = mul_ans[8:3];
         end
         A_MODE, B_MODE:begin
             add_a = {pre_psum[8-(((state+1)) >> 1)], pre_psum[7-(((state+1)) >> 1)]};
-            add_b = mul_ans_conv[8:3];
+            add_b = mul_ans[8:3];
         end
         C_MODE:begin
             add_a = {pre_psum[8-(((state+1)) >> 1)], pre_psum[7-(((state+1))  >> 1)]};
-            add_b = {/*wasted*/mul_ans_conv[0],mul_ans_conv[5:4],/*wasted*/mul_ans_conv[0],mul_ans_conv[3:2]}; // adder[5],adder[2] are wasted
+            add_b = {/*wasted*/mul_ans[0],mul_ans[5:4],/*wasted*/mul_ans[0],mul_ans[3:2]}; // adder[5],adder[2] are wasted
         end  
         D_MODE:begin
             add_a = {pre_psum[8-(((state+1)) >> 1)], pre_psum[7-(((state+1)) >> 1)]};
-            add_b = {/*wasted*/mul_ans_conv[0],mul_ans_conv[8:7],/*wasted*/mul_ans_conv[0],mul_ans_conv[1:0]};
+            add_b = {/*wasted*/mul_ans[0],mul_ans[8:7],/*wasted*/mul_ans[0],mul_ans[1:0]};
         end
     endcase
 end
@@ -145,42 +142,47 @@ always_comb begin
     case(weight_mode)
         E_MODE: begin
             {pre_psum_next[8-state],pre_psum_next[7-state]} <= add_ans;
-            pre_psum_next[6-state] <= mul_ans_conv[2:0];
+            pre_psum_next[6-state] <= mul_ans[2:0];
         end
         A_MODE: 
             if(!tick_tock) begin
-                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
-                pre_psum_next[6-((state+1) >> 1)] <= mul_ans_conv[2:0];
+                {pre_psum_next[8-(state/2 + 1)],pre_psum_next[7-(state/2 + 1)]} <= add_ans;
+                pre_psum_next[6-(state/2 + 1)] <= mul_ans[2:0];
             end else begin
-                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
-                pre_psum_next[3-((state+1) >> 1)] <= mul_ans_conv[2:0];
+                {pre_psum_next[5-(state/2 + 1)],pre_psum_next[4-(state/2 + 1)]} <= add_ans;
+                pre_psum_next[3-(state/2 + 1)] <= mul_ans[2:0];
             end
         B_MODE:
             if(!tick_tock) 
-                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
+                {pre_psum_next[8-(state/2 + 1)],pre_psum_next[7-(state/2 + 1)]} <= add_ans;
             else 
-                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
+                {pre_psum_next[5-(state/2 + 1)],pre_psum_next[4-(state/2 + 1)]} <= add_ans;
         C_MODE:
             if(!tick_tock) begin
-                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
-                //pre_psum_next[8-((state+1) >> 1)][2] <= '0;                                //clear: unnecessary
-                //pre_psum_next[7-((state+1) >> 1)][2] <= '0;
-                pre_psum_next[6-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
+                pre_psum_next[8-(state/2 + 1)][1:0] <= add_ans[4:3];
+                pre_psum_next[7-(state/2 + 1)][1:0] <= add_ans[1:0];
+                //pre_psum_next[8-(state/2 + 1)][2] <= '0;                                //clear: unnecessary
+                //pre_psum_next[7-(state/2 + 1)][2] <= '0;
+                pre_psum_next[6 - (state/2 + 1)][1:0] <= mul_ans[1:0];
             end else begin
-                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
-                // pre_psum_next[5-((state+1) >> 1)][2] <= '0;
-                //pre_psum_next[4-((state+1) >> 1)][2] <= '0;
-                pre_psum_next[3-((state+1) >> 1)] <= {{PSUM_WIDTH{1'b0}},mul_ans_conv[1:0]};
+                pre_psum_next[5-(state/2 + 1)][1:0] <= add_ans[4:3];
+                pre_psum_next[4-(state/2 + 1)][1:0] <= add_ans[1:0];
+                //pre_psum_next[8-(state/2 + 1)][2] <= '0;                                //clear: unnecessary
+                //pre_psum_next[7-(state/2 + 1)][2] <= '0;
+                pre_psum_next[3 - (state/2 + 1)][1:0] <= mul_ans[1:0];
+
             end
         D_MODE:
             if(!tick_tock) begin
-                {pre_psum_next[8-((state+1) >> 1)],pre_psum_next[7-((state+1) >> 1)]} <= add_ans;
-                //pre_psum_next[8-((state+1) >> 1)][2] <= '0;
-                //pre_psum_next[7-((state+1) >> 1)][2] <= '0;
+                pre_psum_next[8-(state/2 + 1)][1:0] <= add_ans[4:3];
+                pre_psum_next[7-(state/2 + 1)][1:0] <= add_ans[1:0];
+                //pre_psum_next[8-(state/2 + 1)][2] <= '0;
+                //pre_psum_next[7-(state/2 + 1)][2] <= '0;
             end else begin
-                {pre_psum_next[5-((state+1) >> 1)],pre_psum_next[4-((state+1) >> 1)]} <= add_ans;
-                //pre_psum_next[5-((state+1) >> 1)][2] <= '0;
-                //pre_psum_next[4-((state+1) >> 1)][2] <= '0;
+                pre_psum_next[5-(state/2 + 1)][1:0] <= add_ans[4:3];
+                pre_psum_next[4-(state/2 + 1)][1:0] <= add_ans[1:0];
+                //pre_psum_next[5-(state/2 + 1)][2] <= '0;
+                //pre_psum_next[4-(state/2 + 1)][2] <= '0;
             end
     endcase
 end

@@ -24,6 +24,7 @@ module diff_core_top(
     //input  logic                                                                                core_bit_mode_i,
     //input  logic                                                                                core_fm_ping_pong_i,
     input  logic                                                                                core_is_diff_i,
+    input  logic                                                                                core_frm_is_ref_i,
     //
     input  logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                       load_fm_wr_addr,
     input  logic [CONF_PE_COL - 1 : 0][71 : 0]                                                  load_fm_din,
@@ -59,15 +60,17 @@ logic [7 : 0 ]                                                       w_num;
 logic [7 : 0 ]                                                       h_num;
 logic [7 : 0 ]                                                       c_num;
 logic [7 : 0 ]                                                       co_num;
+logic [3 : 0 ]                                                       shift_bias;
+logic [3 : 0 ]                                                       shift_wb;
 logic [7 : 0 ]                                                       wb_w_num;
 logic [7 : 0 ]                                                       wb_h_num;
 logic [7 : 0 ]                                                       wb_w_cut;
-logic                                                                bit_mode;             
 logic                                                                kernel_mode;
-logic                                                                in_bit_mode;
+logic [CONF_PE_COL - 1 : 0]                                          in_bit_mode;
 logic                                                                is_diff;
 logic [CONF_PE_COL - 1 : 0]                                          is_odd_row;
 logic                                                                is_first;
+logic                                                                is_last;
 logic [CONF_PE_COL - 1 : 0]                                          end_of_row;
 logic [CONF_PE_COL - 1 : 0][7 : 0]                                   activation;
 logic [CONF_PE_COL - 1 : 0]                                          activation_en;
@@ -124,15 +127,18 @@ PE_matrix inst_PE_matrix(
     .w_num_i                   (w_num), 
     .h_num_i                   (h_num), 
     .c_num_i                   (c_num),         
-    .co_num_i                  (co_num),         
+    .co_num_i                  (co_num),   
+    .shift_bias_i              (shift_bias),
+    .shift_wb_i                (shift_wb),     
     .wb_w_num_i                (wb_w_num),         
     .wb_h_num_i                (wb_h_num),         
     .wb_w_cut_i                (wb_w_cut),         
-    .bit_mode_i                (bit_mode),             
     .kernel_mode_i             (kernel_mode),  
     .in_bit_mode_i             (in_bit_mode),             
     .is_diff_i                 (is_diff),
+    .frm_is_ref_i              (core_frm_is_ref_i),
     .is_first_i                (is_first),
+    .is_last_i                 (is_last),
     .is_odd_row_i              (is_odd_row),     
     .end_of_row_i              (end_of_row),
     .activation_i              (activation),     

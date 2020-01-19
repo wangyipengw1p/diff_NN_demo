@@ -39,13 +39,15 @@ module core_top_ctrl(
     output logic [7 : 0 ]                                                                       h_num,
     output logic [7 : 0 ]                                                                       c_num,
     output logic [7 : 0 ]                                                                       co_num,
+    output logic [3 : 0 ]                                                                       shift_bias,
+    output logic [3 : 0 ]                                                                       shift_wb,
     output logic [7 : 0 ]                                                                       wb_w_num,
     output logic [7 : 0 ]                                                                       wb_w_cut,
     output logic [7 : 0 ]                                                                       wb_h_num,
-    output logic                                                                                bit_mode,             
     output logic                                                                                kernel_mode,
     output logic                                                                                is_first,
-    output logic                                                                                in_bit_mode,             
+    output logic                                                                                is_last,
+    output logic [CONF_PE_COL - 1 : 0]                                                          in_bit_mode,             
     output logic [CONF_PE_COL - 1 : 0]                                                          is_odd_row,
     output logic [CONF_PE_COL - 1 : 0]                                                          end_of_row,
     output logic [CONF_PE_COL - 1 : 0][7 : 0]                                                   activation,
@@ -105,7 +107,7 @@ logic [CONF_PE_COL - 1 : 0][$clog2(CONF_FM_BUF_DEPTH) - 1 : 0]                  
 always_comb save_fm_dout = core_ready ? fm_dout : '0;
 // - ctrl protcol -----------------------------------------------------
 logic in_one_layer_finish, wb_one_layer_finish, wb_one_layer_finish_d, in_finish_all, wb_finish_all;
-logic wb_tick_tock, in_tick_tock;                    // for diff
+logic wb_tick_tock, in_tick_tock;                    // for diff; in_tick_tock not used
 logic [2:0] in_layer_num, wb_layer_num;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
@@ -161,7 +163,7 @@ end
 // - layer and parameters -------------------------------------------------------------
 
 // - finish logic -
-always_comb in_finish_all = in_one_layer_finish && in_layer_num == 5 && in_tick_tock;
+always_comb in_finish_all = in_one_layer_finish && in_layer_num == 5;
 always_comb wb_finish_all = wb_one_layer_finish && wb_layer_num == 5;                   //wb tick tock is controled by wb module
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n) begin
@@ -179,7 +181,7 @@ always_ff@(posedge clk or negedge rst_n)
             in_tick_tock <= core_is_diff_i ? '0 : '1;                      // 8bit then 4bit for diff mode
         end else if (core_ready) {in_layer_num, wb_layer_num, wb_tick_tock, in_tick_tock} <= '0;
         else begin
-            if(in_one_layer_finish && in_tick_tock) in_layer_num <= in_layer_num + 1;
+            if(in_one_layer_finish) in_layer_num <= in_layer_num + 1;
             if(wb_one_layer_finish) wb_layer_num <= wb_layer_num + 1;               //tick tock is controled by write back module
             if(wb_one_layer_finish && is_diff) wb_tick_tock <= ~wb_tick_tock;
             if(in_one_layer_finish && is_diff) in_tick_tock <= ~in_tick_tock;
@@ -188,10 +190,8 @@ always_ff@(posedge clk or negedge rst_n)
 // hard-coded network parameters, actually could be calculated, but for easy ..................................................................
 logic [7:0] wb_co_num;
 always_comb begin
-    // bit_mode     `
-    bit_mode = is_diff ? 1 : 0;
     is_first = 0;                           // will be high for the first layer
-    in_bit_mode = is_diff ? in_tick_tock : 0;
+    is_last = '0;
     // kernel mode
     case (in_layer_num)
         3'd1:begin
@@ -201,6 +201,7 @@ always_comb begin
             co_num= 8'd24;
             kernel_mode = 1;
             is_first = 1;
+            shift_bias = 4'd12;
         end
         3'd2:begin
             w_num = 8'd98;
@@ -208,12 +209,14 @@ always_comb begin
             c_num = 8'd24;
             co_num= 8'd36;
             kernel_mode = 1;
+            shift_bias = 4'd9;
         end
         3'd3: begin
             w_num = 8'd47;
             h_num = 8'd14;
             c_num = 8'd36;
             co_num= 8'd48;
+            shift_bias = 4'd8;
             kernel_mode = 1;
         end
         3'd4: begin
@@ -221,6 +224,7 @@ always_comb begin
             h_num = 8'd5;
             c_num = 8'd48;
             co_num= 8'd64;
+            shift_bias = 4'd8;
             kernel_mode = 0;
         end
         3'd5:begin
@@ -228,6 +232,7 @@ always_comb begin
             h_num = 8'd3;
             c_num = 8'd64;
             co_num= 8'd64;
+            shift_bias = 4'd8;
             kernel_mode = 0;
         end
         default:begin
@@ -235,6 +240,7 @@ always_comb begin
             h_num = 8'd0;
             c_num = 8'd0;
             co_num= 8'd0;
+            shift_bias = 4'd0;
             kernel_mode = 1;
         end
     endcase
@@ -245,35 +251,42 @@ always_comb begin
             wb_h_num  = 8'd31;
             wb_w_cut  = 8'd0;
             wb_co_num = 8'd24;
+            shift_wb  = 4'd11;
         end
         3'd2: begin
-            wb_w_num  = 8'd8;       // 48/6
+            wb_w_num  = 8'd9;       // 48/6
             wb_h_num  = 8'd14;
-            wb_w_cut  = 8'd1;
+            wb_w_cut  = 8'd0;
+            shift_wb  = 4'd9;
             wb_co_num = 8'd36;
         end
         3'd3: begin
-            wb_w_num  = 8'd4;       // 24/6
+            wb_w_num  = 8'd5;       // 24/6
             wb_h_num  = 8'd5;
-            wb_w_cut  = 8'd0;
+            shift_wb  = 4'd8;
+            wb_w_cut  = 8'd1;
             wb_co_num = 8'd48;
         end
         3'd4: begin
             wb_w_num  = 8'd4;       // 24/6
             wb_h_num  = 8'd3;
             wb_w_cut  = 8'd0;
+            shift_wb  = 4'd8;
             wb_co_num = 8'd64;
         end
         3'd5: begin
             wb_w_num  = 8'd3;       // 18/6
             wb_h_num  = 8'd1;
-            wb_w_cut  = 8'd1;
+            wb_w_cut  = 8'd0;
+            shift_wb  = 4'd8;
             wb_co_num = 8'd64;
+            is_last = '1;
         end
         default: begin
             wb_co_num = 0;
             wb_w_num  = 0;
             wb_h_num  = 0;
+            shift_wb  = 0;
             wb_w_cut  = 0;
         end
     endcase
@@ -305,7 +318,7 @@ always_comb in_one_layer_finish = &in_layer_finish_col;
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)fm_guard_gen_ctrl_valid <= '0;
     else begin
-        if(in_state == START && in_tick_tock == (is_diff ? '0 : '1)) fm_guard_gen_ctrl_valid <= '1;
+        if(in_state == START) fm_guard_gen_ctrl_valid <= '1;
         if(fm_guard_gen_ctrl_valid && fm_guard_gen_ctrl_ready) fm_guard_gen_ctrl_valid <= '0;
     end 
 
@@ -339,14 +352,20 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
     // in_one_ci_finish: this col finishes input for a input channel
     // in_one_co_finish: this col finishes input for an output channel
     always_comb in_one_ci_finish = (in_state == PROCESS) && PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && count_h == 0 && count_w < 6 &&
-                                   (in_bit_mode && (count_ci + 2*CONF_PE_COL > c_num - 1) || !in_bit_mode && (count_ci + CONF_PE_COL > c_num - 1));
+                                   (in_bit_mode[j] && (count_ci + 2*CONF_PE_COL > c_num - 1) || !in_bit_mode[j] && (count_ci + CONF_PE_COL > c_num - 1));
     always_comb in_one_co_finish = (in_state != IDLE) && count_co == co_num && !in_layer_finish_col[j];
     //if ci_num is not a multiple of COL_NUM, some cols should be gated when finishing a input channel
     always_ff@(posedge clk or negedge rst_n)
-    if(!rst_n) fin_a_input_channel[j] <= '0; 
+    if(!rst_n) {
+        fin_a_input_channel[j],
+        in_bit_mode[j]
+        
+        } <= '0; 
     else begin 
         if(in_one_ci_finish) fin_a_input_channel[j] <= '1; 
         if (&fin_a_input_channel) fin_a_input_channel[j] <= '0; 
+        if(in_one_co_finish) in_bit_mode[j] <= '0;
+        else if(in_one_ci_finish) in_bit_mode[j] <= ~in_bit_mode[j];
     end
     //special counter for input
     always_ff@(posedge clk or negedge rst_n)
@@ -369,7 +388,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         cnt_fm_4 <= cnt_fm_4_pp;
         cnt_gd_4 <= cnt_gd_4_pp;
     end else begin
-        if(!in_bit_mode) begin
+        if(!in_bit_mode[j]) begin
             if(activation_en[j]) 
                 if(cnt_fm_8 == 8) cnt_fm_8 <= 0;
                 else cnt_fm_8 <= cnt_fm_8 + 1;
@@ -392,7 +411,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
             cnt_gd_8_pp <= cnt_gd_8;
             cnt_fm_4_pp <= cnt_fm_4;
             cnt_gd_4_pp <= cnt_gd_4;
-            if(!in_bit_mode) begin
+            if(!in_bit_mode[j]) begin
                 if(activation_en[j]) 
                     if(cnt_fm_8 == 8) cnt_fm_8_pp <= 0;
                     else cnt_fm_8_pp <= cnt_fm_8 + 1;
@@ -422,22 +441,22 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         } <= '0;
         is_odd_row[j] <= 1;
         end else begin
-            if((in_state == START) || in_one_layer_finish) begin
+            if((in_state == START) || in_one_layer_finish || (in_state == FINISH)) begin
                 count_w  <= w_num - 1;
                 count_h  <= h_num - 1;
                 count_ci <= j;
                 count_co <= 0;
-                if(j > (in_bit_mode ? (c_num >> 1) : c_num - 1)) in_gate_col[j] <= 1;                  //special: if COL NUM > ci num, there will be a rol in IDLE (to be optimised for power)
+                if(j > (in_bit_mode[j] ? (c_num >> 1) : c_num - 1)) in_gate_col[j] <= 1;                  //special: if COL NUM > ci num, there will be a rol in IDLE (to be optimised for power)
                 else in_gate_col[j] <= 0;
             end else if((in_state == PROCESS) && PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j]) begin
                 if (count_h == 0 && count_w < 6)begin
                     count_w <= w_num - 1;
                     count_h <=  h_num - 1;
-                    if (in_bit_mode && (count_ci + 2*CONF_PE_COL > c_num - 1) || !in_bit_mode && (count_ci + CONF_PE_COL > c_num - 1))begin                         // if 4bit, ci need add double
+                    if (in_bit_mode[j] && (count_ci + 2*CONF_PE_COL > c_num - 1) || !in_bit_mode[j] && (count_ci + CONF_PE_COL > c_num - 1))begin                         // if 4bit, ci need add double
                         count_ci <= j; 
-                        count_co <= count_co + CONF_PE_ROW; 
+                        if(is_diff && in_bit_mode[j] || !is_diff)count_co <= count_co + CONF_PE_ROW; 
                     end else 
-                        count_ci <=  in_bit_mode ?  count_ci + 2*CONF_PE_COL : count_ci + CONF_PE_COL;
+                        count_ci <=  in_bit_mode[j] ?  count_ci + 2*CONF_PE_COL : count_ci + CONF_PE_COL;
                     
                 end else if (count_w < 6)begin
                     count_w <= w_num - 1;
@@ -477,7 +496,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
             fm_rd_addr_4[j] <= fm_rd_addr_4_pp[j];
             gd_rd_addr_4[j] <= gd_rd_addr_4_pp[j];
         end else begin
-            if(!in_bit_mode) begin
+            if(!in_bit_mode[j]) begin
                 if(PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && cnt_gd_8 == 1) gd_rd_addr_8[j] <= gd_rd_addr_8[j] + 1;   //the addr changes when cnt == 1
                 if(in_state == PROCESS && activation_en[j] && cnt_fm_8 == 1) fm_rd_addr_8[j] <= fm_rd_addr_8[j] + 1;
             end else begin
@@ -491,7 +510,7 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
                 gd_rd_addr_8_pp[j] <= gd_rd_addr_8[j];
                 fm_rd_addr_4_pp[j] <= fm_rd_addr_4[j];
                 gd_rd_addr_4_pp[j] <= gd_rd_addr_4[j];
-                if(!in_bit_mode) begin
+                if(!in_bit_mode[j]) begin
                     if(PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j] && cnt_gd_8 == 1) gd_rd_addr_8_pp[j] <= gd_rd_addr_8[j] + 1;   //the addr changes when cnt == 1
                     if(in_state == PROCESS && activation_en[j] && cnt_fm_8 == 1) fm_rd_addr_8_pp[j] <= fm_rd_addr_8[j] + 1;
                 end else begin
@@ -502,8 +521,8 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         end
     
     always_comb begin
-        in_fm_rd_addr[j] = in_bit_mode ? fm_rd_addr_4[j] : fm_rd_addr_8[j];
-        gd_rd_addr[j] = in_bit_mode ? gd_rd_addr_4[j] : gd_rd_addr_8[j];
+        in_fm_rd_addr[j] = in_bit_mode[j] ? fm_rd_addr_4[j] : fm_rd_addr_8[j];
+        gd_rd_addr[j] = in_bit_mode[j] ? gd_rd_addr_4[j] : gd_rd_addr_8[j];
     end
     // input data management (shift reg for fm and gd)
     logic   [71:0] shift_fm, shift_gd;
@@ -514,13 +533,13 @@ for(j = CONF_PE_COL - 1; j >=0; j--)begin:fm_gd_in
         } <= '0;
         else begin
             if(in_state == PROCESS && activation_en[j])
-                if(cnt_fm_8 == 8 && !in_bit_mode || cnt_fm_4 == 8 && in_bit_mode) shift_fm <= fm_dout[j];
+                if(cnt_fm_8 == 8 && !in_bit_mode[j] || cnt_fm_4 == 8 && in_bit_mode[j]) shift_fm <= fm_dout[j];
                 else  shift_fm <= {shift_fm[63:0], 8'd0};
-            else if(cnt_fm_8 == 0 && !in_bit_mode || cnt_fm_4 == 0 && in_bit_mode) shift_fm <= fm_dout[j];
+            else if(cnt_fm_8 == 0 && !in_bit_mode[j] || cnt_fm_4 == 0 && in_bit_mode[j]) shift_fm <= fm_dout[j];
             if(PE_col_ctrl_valid[j] && PE_col_ctrl_ready[j])
-                if(cnt_gd_8 == 11 && !in_bit_mode || cnt_gd_4 == 8 && in_bit_mode) shift_gd <= gd_dout[j];
+                if(cnt_gd_8 == 11 && !in_bit_mode[j] || cnt_gd_4 == 8 && in_bit_mode[j]) shift_gd <= gd_dout[j];
                 else  shift_gd <= {shift_gd[65:0], 6'd0};
-            else if(cnt_gd_8 == 0 && !in_bit_mode || cnt_gd_4 == 0 && in_bit_mode) shift_gd <= gd_dout[j];
+            else if(cnt_gd_8 == 0 && !in_bit_mode[j] || cnt_gd_4 == 0 && in_bit_mode[j]) shift_gd <= gd_dout[j];
         end
     always_comb activation[j] =  shift_fm[71:64];
     always_comb guard_map[j] = shift_gd[71:66];
@@ -564,7 +583,7 @@ logic [CONF_PE_COL - 1 : 0][$clog2(CONF_GUARD_BUF_DEPTH) - 1 : 0]             gd
 
 // MUX for demo top
 always_comb 
-    if(core_ready) begin        //not run
+    if(!core_ready) begin        //not run
         fm_wr_addr  = col_fm_wr_addr;
         fm_rd_addr  = in_fm_rd_addr;
         fm_din      = col_fm_din_f;
@@ -606,7 +625,7 @@ for(i = CONF_PE_ROW - 1; i >= 0; i--)begin:gen_write_back_ctrl
             if (write_back_finish[i]) begin
                 count_co <= count_co + CONF_PE_ROW;
                 now_wb_port[i] <= now_wb_port[i] + CONF_PE_ROW >= CONF_PE_COL ? now_wb_port[i] + CONF_PE_ROW - CONF_PE_COL : now_wb_port[i] + CONF_PE_ROW;
-                if(bit_mode)tick_tock_for_4bit_wb[i] <= ~tick_tock_for_4bit_wb[i];
+                if(wb_bit_mode[i])tick_tock_for_4bit_wb[i] <= ~tick_tock_for_4bit_wb[i];
             end
             //wb finish
             if(write_back_finish[i] && (count_co + CONF_PE_ROW) > wb_co_num - 1) row_wb_finish[i] <= 1;

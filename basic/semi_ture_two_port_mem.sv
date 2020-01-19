@@ -38,7 +38,7 @@ module semi_ture_two_port_mem#(
       integer ram_index;
       initial
         for (ram_index = 0; ram_index < DEPTH; ram_index = ram_index + 1)
-          BRAM[ram_index] = {(BIT_LENGTH/2){2'b10}};                                          //for test
+          BRAM[ram_index] = '1;                                          //for test
     end
   endgenerate
 

@@ -19,7 +19,8 @@ module ping_pong_buffer#(
     parameter INIT_FILE = ""
 ) (
     input  logic                             clk,
-    input  logic [$clog2(DEPTH) - 1 : 0 ]    addr1,
+    input  logic [$clog2(DEPTH) - 1 : 0 ]    addr1w,
+    input  logic [$clog2(DEPTH) - 1 : 0 ]    addr1r,
     input  logic [$clog2(DEPTH) - 1 : 0 ]    addr2,
     input  logic [BIT_LENGTH       - 1 : 0 ] din1,
     input  logic [BIT_LENGTH       - 1 : 0 ] din2,
@@ -29,13 +30,15 @@ module ping_pong_buffer#(
     output logic [BIT_LENGTH       - 1 : 0 ] dout2,
     input  logic                             ping_pong                    
 );
-logic [$clog2(DEPTH) - 1 : 0 ] addr_ping, addr_pong;
+logic [$clog2(DEPTH) - 1 : 0 ] addr_ping_w, addr_pong_w, addr_ping_r, addr_pong_r;
 logic [BIT_LENGTH  - 1 : 0 ] din_ping, din_pong;
 logic we_ping, we_pong;
 logic [BIT_LENGTH       - 1 : 0 ] dout_ping, dout_pong;
 always_comb begin
-  addr_ping = ping_pong ? addr1 : addr2;
-  addr_pong = ping_pong ? addr2 : addr1;
+  addr_ping_w = ping_pong ? addr1w : addr2;
+  addr_pong_w = ping_pong ? addr2 : addr1w;
+  addr_ping_r = ping_pong ? addr1r : addr2;
+  addr_pong_r = ping_pong ? addr2 : addr1r;
   din_ping  = ping_pong ? din1  : din2;
   din_pong  = ping_pong ? din2  : din1;
   we_ping   = ping_pong ? we1   : we2;
@@ -49,8 +52,8 @@ two_port_mem #(
     .DEPTH(DEPTH)
 ) ping_mem (
   .*,
-  .addra(addr_ping),
-  .addrb(addr_ping),
+  .addra(addr_ping_w),
+  .addrb(addr_ping_r),
   .dina(din_ping),
   .wea(we_ping),
   .enb('1),
@@ -62,8 +65,8 @@ two_port_mem #(
     .DEPTH(DEPTH)
 ) pong_mem (
   .*,
-  .addra(addr_pong),
-  .addrb(addr_pong),
+  .addra(addr_pong_w),
+  .addrb(addr_pong_r),
   .dina(din_pong),
   .wea(we_pong),
   .enb('1),

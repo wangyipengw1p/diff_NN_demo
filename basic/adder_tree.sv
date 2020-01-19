@@ -15,7 +15,7 @@ module adder_tree#(
     parameter NUM   = 4,
     parameter OUT_WIDTH = 32
 )(
-    input  logic [NUM * IN_WIDTH - 1 : 0] a,
+    input  logic signed [NUM - 1 : 0][IN_WIDTH - 1 : 0] a,
     output logic signed [OUT_WIDTH - 1 : 0] ans
 );
 genvar i, j;
@@ -26,12 +26,12 @@ for(i = 1; i <= gen_level(NUM); i++)begin:gen_add_levels
     if(i == 1) begin    // - special for first level -------------------
     
         for(j = 1; j <= gen_num_of_a_level(NUM,i) - 1; j++)begin: gen_add_levels
-            assign sum[j] = a[(NUM- 2*j + 2) * IN_WIDTH - 1 -: IN_WIDTH] + a[(NUM- 2*j + 1) * IN_WIDTH - 1 -: IN_WIDTH];
+            assign sum[j] = a[NUM- 2*j + 1] + a[NUM- 2*j];
         end
         if(gen_odd_sign(NUM,i) == 1) 
-            assign sum[gen_num_of_a_level(NUM,i)] = a[IN_WIDTH - 1 : 0]; //need auto sign extention
+            assign sum[gen_num_of_a_level(NUM,i)] = a[0]; //need auto sign extention
         else
-            assign sum[gen_num_of_a_level(NUM,i)] = a[IN_WIDTH - 1 : 0] + a[2*IN_WIDTH - 1 : IN_WIDTH];
+            assign sum[gen_num_of_a_level(NUM,i)] = a[0] + a[1];
 
     end else if (i == gen_level(NUM)) begin    // - output for last level ------------------
 
@@ -40,12 +40,12 @@ for(i = 1; i <= gen_level(NUM); i++)begin:gen_add_levels
     end else begin      // - intermediate levels ------------------
 
         for(j = 1; j <= gen_num_of_a_level(NUM,i) - 1; j++)begin: gen_add_levels
-            assign sum[j] = gen_add_levels[i-1].sum[(NUM- 2*j + 2) * IN_WIDTH - 1 -: IN_WIDTH] + gen_add_levels[i-1].sum[(NUM- 2*j + 1) * IN_WIDTH - 1 -: IN_WIDTH];
+            assign sum[j] = gen_add_levels[i-1].sum[2*j - 1] + gen_add_levels[i-1].sum[2*j];
         end
         if(gen_odd_sign(NUM,i) == 1) 
-            assign sum[gen_num_of_a_level(NUM,i)] = gen_add_levels[i-1].sum[IN_WIDTH - 1 : 0];       //need auto sign extention
+            assign sum[gen_num_of_a_level(NUM,i)] = gen_add_levels[i-1].sum[gen_num_of_a_level(NUM,i - 1)];       //need auto sign extention
         else
-            assign sum[gen_num_of_a_level(NUM,i)] = gen_add_levels[i-1].sum[IN_WIDTH - 1 : 0] + gen_add_levels[i-1].sum[2*IN_WIDTH - 1 : IN_WIDTH];
+            assign sum[gen_num_of_a_level(NUM,i)] = gen_add_levels[i-1].sum[gen_num_of_a_level(NUM,i - 1)] + gen_add_levels[i-1].sum[gen_num_of_a_level(NUM,i - 1) - 1];
 
     end
 end

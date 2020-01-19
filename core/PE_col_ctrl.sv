@@ -118,8 +118,8 @@ always_comb begin
         TWO:
             if(guard_map[3] == 1) next_state = THREE;
             else if(guard_map[2] == 1) next_state = FOUR;
-            else if(guard_map[2] == 1) next_state = FIVE;
-            else if(guard_map[2] == 1) next_state = SIX;
+            else if(guard_map[1] == 1) next_state = FIVE;
+            else if(guard_map[0] == 1) next_state = SIX;
             else next_state = IDLE;
         THREE:
             if(guard_map[2] == 1)next_state = FOUR;
@@ -140,13 +140,12 @@ end
 // weight mode
 always_comb begin
     weight_mode = E_MODE;
-    if(kernel_mode == 0) weight_mode = E_MODE;
-    else 
+    if(kernel_mode) 
         case(state)
             ONE,THREE,FIVE: 
-                weight_mode = is_odd_row ? A_MODE : B_MODE;
+                weight_mode = is_odd_row ? A_MODE : C_MODE;
             TWO,FOUR,SIX:
-                weight_mode = is_odd_row ? C_MODE : D_MODE;
+                weight_mode = is_odd_row ? B_MODE : D_MODE;
         endcase
 end
 endmodule

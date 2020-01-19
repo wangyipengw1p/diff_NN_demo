@@ -73,9 +73,9 @@ typedef enum logic[2:0] {
 typedef enum logic[2:0]{ A_MODE , B_MODE, C_MODE, D_MODE, E_MODE } PE_weight_mode_t; //E_mode: 3*3 others: 5*5
 
 typedef struct packed {
-    logic [8 : 0][7 : 0] A_9;
-    logic [5 : 0][7 : 0] B_6;
-    logic [5 : 0][7 : 0] C_6;
-    logic [3 : 0][7 : 0] D_4;
+    logic signed [8 : 0][7 : 0] A_9;
+    logic signed [5 : 0][7 : 0] B_6;
+    logic signed [5 : 0][7 : 0] C_6;
+    logic signed [3 : 0][7 : 0] D_4;
 } PE_weight_t;
 endpackage

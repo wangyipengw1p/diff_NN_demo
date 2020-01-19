@@ -12,6 +12,8 @@ Notes:
 
 TODO:
 critical path here maybe
+
+special 4 + 18 + 2
 =========================================================*/
 import diff_demo_pkg::*;
 module write_back(
@@ -24,8 +26,10 @@ module write_back(
     input  logic [7:0]                                          wb_h_num_i,
     input  logic [7:0]                                          wb_w_cut_i,
     input  logic                                                is_diff_i,
+    input  logic                                                is_last,
+    input  logic [3:0]                                          shift_wb,
     //                      
-    input  logic [5:0][PSUM_WIDTH - 1 : 0]                      data_i,         // will be trucated
+    input  logic signed [5:0][PSUM_WIDTH - 1 : 0]               data_i,         // will be trucated
     output logic [$clog2(FM_GUARD_GEN_PSUM_BUF_DEPTH) - 1 : 0]  addr_o,
     //output logic                                                rd_en,
     //
@@ -58,6 +62,9 @@ logic [7:0] wb_w_num;
 logic [7:0] wb_h_num;
 logic [7:0] wb_w_cut;
 logic [7:0] count_w, count_h;
+logic signed [5:0][7:0] data_after_shift;
+logic signed [5:0][PSUM_WIDTH-1:0] data_tmp;
+logic corner_value;         //don't write back
 // - protacal ---------------------------------------------------------------
 always_ff@(posedge clk or negedge rst_n)
     if(!rst_n)begin
@@ -118,7 +125,7 @@ always_comb begin
     case(state)
         IDLE: next_state =  ctrl_valid && ctrl_ready ? START : IDLE;
         START:
-            if(guard_o[5] == 1) next_state = ONE;
+            if(is_last || guard_o[5] == 1) next_state = ONE;
             else if(guard_o[4] == 1) next_state = TWO;
             else if(guard_o[3] == 1)  next_state = THREE;
             else if(guard_o[2] == 1)  next_state = FOUR;
@@ -126,29 +133,29 @@ always_comb begin
             else if(guard_o[0] == 1)  next_state = SIX;
             else  next_state = almost_finish ? IDLE : START;    
         ONE:
-            if(guard_o_r[4] == 1) next_state = TWO;
+            if(is_last || guard_o_r[4] == 1) next_state = TWO;
             else if(guard_o_r[3] == 1) next_state = THREE;
             else if(guard_o_r[2] == 1) next_state = FOUR;
             else if(guard_o_r[1] == 1) next_state = FIVE;
             else if(guard_o_r[0] == 1) next_state = SIX;
             else  next_state = almost_finish ? IDLE : START;
         TWO:
-            if(guard_o_r[3] == 1) next_state = THREE;
+            if(is_last || guard_o_r[3] == 1) next_state = THREE;
             else if(guard_o_r[2] == 1) next_state = FOUR;
-            else if(guard_o_r[2] == 1) next_state = FIVE;
-            else if(guard_o_r[2] == 1) next_state = SIX;
+            else if(guard_o_r[1] == 1) next_state = FIVE;
+            else if(guard_o_r[0] == 1) next_state = SIX;
             else next_state = almost_finish ? IDLE : START;
         THREE:
-            if(guard_o_r[2] == 1)next_state = FOUR;
+            if(is_last || guard_o_r[2] == 1)next_state = FOUR;
             else if(guard_o_r[1] == 1) next_state = FIVE;
             else if(guard_o_r[0] == 1) next_state = SIX;
             else next_state = almost_finish ? IDLE : START;
         FOUR:
-            if(guard_o_r[1] == 1) next_state = FIVE;
+            if(is_last || guard_o_r[1] == 1) next_state = FIVE;
             else if(guard_o_r[0] == 1) next_state = SIX;
             else next_state = almost_finish ? IDLE : START;
         FIVE:
-            if(guard_o_r[0] == 1) next_state = SIX;
+            if(is_last || guard_o_r[0] == 1) next_state = SIX;
             else next_state = almost_finish ? IDLE : START;
         SIX:
             next_state = almost_finish ? IDLE : START;
@@ -172,9 +179,11 @@ always_ff@(posedge clk or negedge rst_n)
 generate
     for (genvar i = 5; i >= 0; i--)begin:relu
         always_comb begin
-            guard_map_4_8[i] = state == START ?  data_i[i][7 : 0] == 0 ? 0 : 1 : 0;      //---------------might be critical path
-            guard_map_4[i] = state == START ? data_i[i][7 : 0] == 0 ? 0: data_i[i][7 : 4] ==  0  ?  1 : 0: 0;                       // not used here        [4bit]
-            guard_map_8[i] = state == START ? data_i[i][7 : 0] == 0 ? 0: data_i[i][7 : 4] !=  0  ?  1 : 0: 0;
+            data_tmp[i] = data_i[i] >>> shift_wb;
+            data_after_shift[i] = {data_tmp[i][PSUM_WIDTH - 1], data_tmp[6:0]};
+            guard_map_4_8[i] = state == START ?  data_after_shift[i] == 0 ? 0 : 1 : 0;      //---------------might be critical path
+            guard_map_4[i] = state == START ? data_after_shift[i] == 0 ? 0: (data_after_shift[i][7 : 3] ==  0 || data_after_shift[i][7 : 3] == '1) ?  1 : 0: 0;                       // not used here        [4bit]
+            guard_map_8[i] = state == START ? data_after_shift[i] == 0 ? 0: !(data_after_shift[i][7 : 3] ==  0 || data_after_shift[i][7 : 3] == '1)  ?  1 : 0: 0;
         end
         /*
         always_ff@(posedge clk or negedge rst_n)
@@ -186,15 +195,25 @@ generate
 endgenerate
 
 
-
-
 //  - data o --------------------------------------------------------------------
+
+always_comb begin
+    corner_value = 0;
+    if(count_w == wb_w_num - 1)
+        case(state)
+            ONE, TWO, THREE, FOUR: corner_value = 1;
+        endcase
+    if(count_w == 0)
+        case(state)
+            FIVE, SIX: corner_value = 1;
+        endcase
+end
 // to be optimised for power
 always_comb guard_o = is_diff ? wb_bit_mode ? guard_map_4 : guard_map_8 : guard_map_4_8;
-always_comb data_o = state == IDLE || state == START ? '0 : data_i[6 - state];
-always_comb data_o_valid = !(state == IDLE || state == START);
-always_comb wb_bit_mode = !is_diff || state == IDLE || state == START ? '0 : guard_4_r[6 - state];
-always_comb guard_o_valid = state == START && next_state != START;
+always_comb data_o = state == IDLE || state == START ? '0 : wb_bit_mode ? {4'd0, data_after_shift[6 - state][3:0]} : data_after_shift[6 - state];
+always_comb data_o_valid = !(state == IDLE || state == START) && !corner_value;
+always_comb wb_bit_mode = is_last || !is_diff || state == IDLE || state == START ? '0 : guard_4_r[6 - state];
+always_comb guard_o_valid = !is_last && (state == START) && next_state != START && !corner_value;
 /*
 // rethink about 4bit
 always_comb guard_o = is_diff ? bit_mode  ? '1 : guard_map_8 : guard_map_4_8;      //valid when state == START for a clk            [4bit]
